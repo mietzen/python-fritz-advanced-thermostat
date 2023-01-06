@@ -35,13 +35,8 @@ class FritzAdvancedThermostat(object):
         self._ssl_verify = ssl_verify
         self._devices = self._fritz_home._devices
         self._prefixed_host = self._fritz_home.get_prefixed_host()
-        self._selenium_options = Options()
-        self._selenium_options.headless = True
-        self._selenium_options.add_argument("--window-size=1920,1200")
         self._thermostat_data = {}
-
-    def _get_settable_keys(self):
-        return [
+        self._settable_keys = [
             "Holiday1Enabled", "Holiday1EndDay", "Holiday1EndHour",
             "Holiday1EndMonth", "Holiday1StartDay", "Holiday1StartHour",
             "Holiday1StartMonth", "Holiday2Enabled", "Holiday2EndDay",
@@ -56,12 +51,21 @@ class FritzAdvancedThermostat(object):
             "SummerStartMonth", "WindowOpenTimer", "WindowOpenTrigger",
             "locklocal", "lockuiapp"
         ]
+        self._supported_thermostats = ['FRITZ!DECT 301']
+        self._supported_firmware = ['7.29']
+        self._thermostats = [
+            x.name for x in self._devices.values()
+            if x.productname in self._supported_thermostats
+        ]
+        self._selenium_options = Options()
+        self._selenium_options.headless = True
+        self._selenium_options.add_argument("--window-size=1920,1200")
 
-    def _get_supported_thermostats(self):
-        return ['FRITZ!DECT 301']
-
-    def _get_supported_firmware(self):
-        return ['7.29']
+    def _check_device_name(self, device_name):
+        if device_name not in self._thermostats:
+            err = 'Error:\n' + device_name + ' not found!\n' + \
+                'Available devices:' + ', '.join(self._thermostats)
+            raise FritzAdvancedThermostatError(err)
 
     def _get_device_id_by_name(self, device_name):
         for dev in self._devices.values():
@@ -96,7 +100,9 @@ class FritzAdvancedThermostat(object):
         # Wait until site is fully loaded
         WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.ID, "uiNumUp:Roomtemp")))
-        sleep(0.5)
+        sleep(
+            0.5
+        )  # Sometimes we need to await a little longer even if all elements are loaded
         driver.execute_script('var gOrigValues = {}; getOrigValues()')
         thermostat_data = driver.execute_script('return gOrigValues')
         room_temp = driver.execute_script(
@@ -109,7 +115,7 @@ class FritzAdvancedThermostat(object):
     def _set_thermostat_values(self, device_name, **kwargs):
         self._load_raw_thermostat_data(device_name)
         for key, value in kwargs.items():
-            if key in self._get_settable_keys():
+            if key in self._settable_keys:
                 if key in self._thermostat_data[device_name].keys():
                     self._thermostat_data[device_name][key] = value
                 else:
@@ -119,7 +125,7 @@ class FritzAdvancedThermostat(object):
             else:
                 raise FritzAdvancedThermostatKeyError(
                     'Error:\n' + key + ' is not in:\n' +
-                    ' '.join(self._get_settable_keys()))
+                    ' '.join(self._settable_keys))
 
     def _generate_headers(self, data):
         headers = {
@@ -150,16 +156,17 @@ class FritzAdvancedThermostat(object):
             "ExtTempsensorID": "tochoose"
         }
         data_dict = data_dict | self._thermostat_data[device_name]
-        
+
         holiday_enabled_count = 0
         holiday_id_count = 1
         for key, value in self._thermostat_data[device_name].items():
             if re.search(r"Holiday\dEnabled", key):
                 holiday_enabled_count += int(value)
-                data_dict['Holiday' + str(holiday_id_count) + 'ID'] = holiday_id_count
+                data_dict['Holiday' + str(holiday_id_count) +
+                          'ID'] = holiday_id_count
                 holiday_id_count += 1
         data_dict['HolidayEnabledCount'] = holiday_enabled_count
-        
+
         if dry_run:
             data_dict = data_dict | {
                 'validate': 'apply',
@@ -186,6 +193,7 @@ class FritzAdvancedThermostat(object):
         return '&'.join(data_pkg)
 
     def commit(self, device_name):
+        self._check_device_name(device_name)
         dry_run_url = '/'.join(
             [self._prefixed_host, 'net', 'home_auto_hkr_edit.lua'])
         set_url = '/'.join([self._prefixed_host, 'data.lua'])
@@ -231,18 +239,17 @@ class FritzAdvancedThermostat(object):
                 'Error: ' + str(dry_run_response.status_code))
 
     def set_thermostat_offset(self, device_name, offset):
+        self._check_device_name(device_name)
         self._set_thermostat_values(device_name, Offset=str(offset))
 
     def get_thermostat_offset(self, device_name, reload_device=False):
+        self._check_device_name(device_name)
         self._load_raw_thermostat_data(device_name,
                                        reload_device=reload_device)
         return self._thermostat_data[device_name]['Offset']
 
     def get_thermostats(self):
-        return [
-            x.name for x in self._devices.values()
-            if x.productname in self._get_supported_thermostats()
-        ]
+        return self._thermostats
 
 
 #TODO: Implement
