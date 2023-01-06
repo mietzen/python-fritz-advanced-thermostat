@@ -9,24 +9,67 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from pyfritzhome import Fritzhome
 
+
 class FritzAdvancedThermostatError(Exception):
     pass
 
-class FritzAdvancedThermostat(Fritzhome):
-    def __init__(self,
-                 host,
-                 user,
-                 password,
-                 ssl_verify=False):
-        super().__init__(host, user, password, ssl_verify)
+class FritzAdvancedThermostatKeyError(KeyError):
+    pass
+
+class FritzAdvancedThermostatConnectionError(ConnectionError):
+    pass
+
+class FritzAdvancedThermostat(object):
+    def __init__(self, host, user, password, ssl_verify=False):
+        self._fritz_home = Fritzhome(host, user, password, ssl_verify)
+        self._fritz_home.login()
+        self._fritz_home.update_devices()
+        self._sid = self._fritz_home._sid
+        self._user = user
+        self._password = password
+        self._ssl_verify = ssl_verify
+        self._devices = self._fritz_home._devices
+        self._prefixed_host = self._fritz_home.get_prefixed_host()
         self._selenium_options = Options()
         self._selenium_options.headless = True
         self._selenium_options.add_argument("--window-size=1920,1200")
-        self.login()
+        self._thermostat_data = {}
 
-    def _get_raw_thermostat_data(self, device_name):
+    def _get_settable_keys(self):
+        return [
+            "Holiday1Enabled", "Holiday1EndDay", "Holiday1EndHour",
+            "Holiday1EndMonth", "Holiday1StartDay", "Holiday1StartHour",
+            "Holiday1StartMonth", "Holiday2Enabled", "Holiday2EndDay",
+            "Holiday2EndHour", "Holiday2EndMonth", "Holiday2StartDay",
+            "Holiday2StartHour", "Holiday2StartMonth", "Holiday3Enabled",
+            "Holiday3EndDay", "Holiday3EndHour", "Holiday3EndMonth",
+            "Holiday3StartDay", "Holiday3StartHour", "Holiday3StartMonth",
+            "Holiday4Enabled", "Holiday4EndDay", "Holiday4EndHour",
+            "Holiday4EndMonth", "Holiday4StartDay", "Holiday4StartHour",
+            "Holiday4StartMonth", "Holidaytemp", "Offset", "SummerEnabled",
+            "SummerEndDay", "SummerEndMonth", "SummerStartDay",
+            "SummerStartMonth", "WindowOpenTimer", "WindowOpenTrigger",
+            "locklocal", "lockuiapp"
+        ]
+
+    def _get_supported_thermostats(self):
+        return [ 'FRITZ!DECT 301' ]
+
+    def _get_supported_firmware(self):
+        return [ 'FRITZ!OS ' ]
+
+    def _get_device_id_by_name(self, device_name):
+        for dev in self._devices.values():
+            if dev.name == device_name:
+                return dev.identifier
+
+    def _load_raw_thermostat_data(self, device_name, reload_device):
+        if device_name not in self._thermostat_data.keys() or reload_device:
+            self._scrape_thermostat_data(device_name)
+
+    def _scrape_thermostat_data(self, device_name):
         driver = webdriver.Chrome(options=self._selenium_options)
-        driver.get(self.get_prefixed_host())
+        driver.get(self._prefixed_host)
         driver.find_element(By.ID, "uiViewUser").send_keys(self._user)
         driver.find_element(By.ID, "uiPass").send_keys(self._password)
         WebDriverWait(driver, 60).until(
@@ -46,8 +89,8 @@ class FritzAdvancedThermostat(Fritzhome):
                 row.find_element(By.TAG_NAME, "button").click()
                 break
         # Wait until site is fully loaded
-        WebDriverWait(driver,
-                      60).until(EC.element_to_be_clickable((By.ID, "uiNumUp:Roomtemp")))
+        WebDriverWait(driver, 60).until(
+            EC.element_to_be_clickable((By.ID, "uiNumUp:Roomtemp")))
         driver.execute_script('var gOrigValues = {}; getOrigValues()')
         thermostat_data = driver.execute_script('return gOrigValues')
         room_temp = driver.execute_script(
@@ -55,97 +98,110 @@ class FritzAdvancedThermostat(Fritzhome):
         )
         thermostat_data['Roomtemp'] = room_temp
         driver.quit()
-        return thermostat_data
+        self._thermostat_data[device_name] = thermostat_data
 
-    def _get_device_id_by_name(self, device_name):
-        if self._devices is None:
-            self.update_devices()
-        for dev in self._devices.values():
-            if dev.name == device_name:
-                return dev.identifier
-
-    def set_thermostat_offset(self, device_name, offset):
-        verify_url = '/'.join(
-            [self.get_prefixed_host(), 'net', 'home_auto_hkr_edit.lua'])
-        set_url = '/'.join([self.get_prefixed_host(), 'data.lua'])
-        verify_data = self._generate_data_pkg('verify', device_name, offset)
-        set_data = self._generate_data_pkg('set', device_name, offset)
-        verification = requests.post(
-            verify_url,
-            headers=self._generate_headers(verify_data),
-            data=verify_data,
-            verify=self._ssl_verify)
-        if verification.status_code == 200:
-            check = json.loads(verification.text)
-            if check['ok']:
-                status = requests.post(set_url,
-                            headers=self._generate_headers(set_data),
-                            data=set_data,
-                            verify=self._ssl_verify)
-                if status.status_code != 200:
-                    print('Error: ' + str(status.status_code))
+    def _set_thermostat_values(self, device_name, **kwargs):
+        self._load_raw_thermostat_data(device_name)
+        for key, value in kwargs.items():
+            if key in self._get_settable_keys():
+                if key in self._thermostat_data[device_name].keys():
+                    self._thermostat_data[device_name][key] = value
+                else:
+                    raise FritzAdvancedThermostatKeyError('Error:\n' + key + ' is not available for: ' + device_name)
             else:
-                for i in check['tomark']:
-                    print('Error in: ' + i)
-                print(check['alert'])
-        else:
-            print('Error: ' + str(verification.status_code))
-
+                raise FritzAdvancedThermostatKeyError('Error:\n' + key + ' is not in:\n' + ' '.join(self._get_settable_keys()))
+            
     def _generate_headers(self, data):
         headers = {
             "Accept": "*/*",
             "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": self.get_prefixed_host(),
+            "Origin": self._prefixed_host,
             "Content-Length": str(len(data)),
             "Accept-Language": "en-GB,en;q=0.9",
-            "Host": self.get_prefixed_host().split('://')[1],
+            "Host": self._prefixed_host.split('://')[1],
             "User-Agent":
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Safari/605.1.15",
-            "Referer": self.get_prefixed_host(),
+            "Referer": self._prefixed_host,
             "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive"
         }
         return headers
 
-    def _generate_data_pkg(self, req_type, device_name, offset):
-        current_thermostat_data = self._get_raw_thermostat_data(device_name)
-        common_data = "sid=" + self._sid + "&" + \
-            "device=" + self._get_device_id_by_name(device_name) + "&" + \
-            "view=&" + \
-            "back_to_page=sh_dev&" + \
-            "ule_device_name=" + device_name + "&" + \
-            "locklocal=off&" + \
-            "lockuiapp=off&" + \
-            "Heiztemp=" + current_thermostat_data['Heiztemp'] + "&" + \
-            "Absenktemp=" + current_thermostat_data['Absenktemp'] + "&" + \
-            "graphState=1&"
-        for key in current_thermostat_data.keys():
-            if re.match(r"timer_item_\d+", key):
-                common_data += key + "=" + quote(current_thermostat_data[key]) + "&"
-
+    def _generate_data_pkg(self, device_name, dry_run=True):
+        self._load_raw_thermostat_data(device_name)
+        data_pkg = [
+            "sid=" + self._sid,
+            "device=" + self._get_device_id_by_name(device_name), "view=",
+            "back_to_page=sh_dev", "ule_device_name=" + device_name,
+            "graphState=1", "tempsensor=own", "ExtTempsensorID=tochoose"
+        ]
+        
         holiday_enabled_count = 0
-        for key in current_thermostat_data.keys():
-            if re.match(r"Holiday\d\w+", key):
-                common_data += key + "=" + current_thermostat_data[key] + "&"
+        for key, value in self._thermostat_data[device_name].items():
+            data_pkg.append(key + '=' + quote(str(value)))
             if re.match(r"Holiday\dEnabled", key):
                 holiday_enabled_count += 1
-        common_data += "HolidayEnabledCount=" + str(holiday_enabled_count) + "&"
-        
-        for key in current_thermostat_data.keys():
-            if re.match(r"Summer\w+", key):
-                common_data += key + "=" + quote(current_thermostat_data[key]) + "&"
+        data_pkg.append("HolidayEnabledCount=" + str(holiday_enabled_count))
 
-        common_data += "WindowOpenTrigger=" + current_thermostat_data['WindowOpenTrigger'] + "&" + \
-            "WindowOpenTimer=" + current_thermostat_data['WindowOpenTimer'] + "&" + \
-            "tempsensor=own&" + \
-            "Roomtemp=" + current_thermostat_data['Roomtemp'] + "&" + \
-            "ExtTempsensorID=tochoose&" + \
-            "Offset=" + offset + "&"
-
-        if req_type == 'verify':
-            data = common_data + 'validate=apply&xhr=1&useajax=1'
-        elif req_type == 'set':
-            data = 'xhr=1&lang=de&' + common_data + 'apply=&oldpage=%2Fnet%2Fhome_auto_hkr_edit.lua'
+        if dry_run:
+            data_pkg += ['validate=apply', 'xhr=1', 'useajax=1']
         else:
-            print('error')
-        return data.replace(' ','')
+            data_pkg += [
+                'xhr=1', 'lang=de', 'apply=',
+                'oldpage=%2Fnet%2Fhome_auto_hkr_edit.lua'
+            ]
+
+        return '&'.join(data_pkg)
+
+    def commit(self, device_name):
+        dry_run_url = '/'.join(
+            [self._prefixed_host, 'net', 'home_auto_hkr_edit.lua'])
+        set_url = '/'.join([self._prefixed_host, 'data.lua'])
+        dry_run_data = self._generate_data_pkg(device_name, dry_run=True)
+        set_data = self._generate_data_pkg(device_name, dry_run=False)
+        dry_run_response = requests.post(
+            dry_run_url,
+            headers=self._generate_headers(dry_run_data),
+            data=dry_run_data,
+            verify=self._ssl_verify)
+        if dry_run_response.status_code == 200:
+            try:
+                dry_run_check = json.loads(dry_run_response.text)
+                if dry_run_check['ok']:
+                    response = requests.post(
+                        set_url,
+                        headers=self._generate_headers(set_data),
+                        data=set_data,
+                        verify=self._ssl_verify)
+                    if response.status_code == 200:
+                        check = json.loads(response.text)
+                        if check['pid'] != 'sh_dev':
+                            err = 'Error: Something went wrong setting the thermostat values'
+                            err = '\n' + dry_run_response.text
+                            raise FritzAdvancedThermostatError(err)
+                    else:
+                        raise FritzAdvancedThermostatConnectionError('Error: ' + str(response.status_code))
+                else:
+                    err = 'Error in: ' + ','.join(dry_run_check['tomark'])
+                    err += '\n' + dry_run_check['alert']
+                    raise FritzAdvancedThermostatError(err)
+            except json.decoder.JSONDecodeError:
+                if response:
+                    err = 'Error: Something went wrong on setting the thermostat values'
+                    err += '\n' + response.text
+                else:
+                    err = 'Error: Something went wrong on dry run'
+                    err += '\n' + dry_run_response.text
+                raise FritzAdvancedThermostatError(err)
+        else:
+            raise FritzAdvancedThermostatConnectionError('Error: ' + str(dry_run_response.status_code))
+
+    def set_thermostat_offset(self, device_name, offset):
+        self._set_thermostat_values(device_name, Offset=str(offset))
+
+    def get_thermostat_offset(self, device_name, reload_device=False):
+        self._load_raw_thermostat_data(device_name, reload_device)
+        return self._thermostat_data[device_name]['Offset']
+    
+    def get_thermostats(self):
+        return [x.name for x in self._devices.values() if x.productname in self._get_supported_thermostats()]
