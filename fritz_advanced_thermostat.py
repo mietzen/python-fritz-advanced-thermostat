@@ -139,7 +139,6 @@ class FritzAdvancedThermostat(object):
 
     def _generate_data_pkg(self, device_name, dry_run=True):
         self._load_raw_thermostat_data(device_name)
-        key_list = None
         data_dict = {
             "sid": self._sid,
             "device": self._get_device_id_by_name(device_name),
@@ -151,45 +150,22 @@ class FritzAdvancedThermostat(object):
             "ExtTempsensorID": "tochoose"
         }
         data_dict = data_dict | self._thermostat_data[device_name]
-        holiday_enabled_count = str(
-            sum([
-                int(y) for x, y in self._thermostat_data[device_name].items()
-                if re.search(r"Holiday\dEnabled", x)
-            ]))
+        
         holiday_enabled_count = 0
-        holiday_count = 1
+        holiday_id_count = 1
         for key, value in self._thermostat_data[device_name].items():
             if re.search(r"Holiday\dEnabled", key):
                 holiday_enabled_count += int(value)
-                data_dict['Holiday' + str(holiday_count) + 'ID'] = holiday_count
-                holiday_count += 1
+                data_dict['Holiday' + str(holiday_id_count) + 'ID'] = holiday_id_count
+                holiday_id_count += 1
         data_dict['HolidayEnabledCount'] = holiday_enabled_count
+        
         if dry_run:
             data_dict = data_dict | {
                 'validate': 'apply',
                 'xhr': '1',
                 'useajax': '1'
             }
-            key_list = [
-                "sid", "device", "view", "back_to_page", "ule_device_name",
-                "locklocal", "lockuiapp", "Heiztemp", "Absenktemp",
-                "graphState", "timer_item_0", "timer_item_1", "Holidaytemp",
-                "Holiday1StartDay", "Holiday1StartMonth", "Holiday1StartHour",
-                "Holiday1EndDay", "Holiday1EndMonth", "Holiday1EndHour",
-                "Holiday1Enabled", "Holiday1ID", "Holiday2StartDay",
-                "Holiday2StartMonth", "Holiday2StartHour", "Holiday2EndDay",
-                "Holiday2EndMonth", "Holiday2EndHour", "Holiday2Enabled",
-                "Holiday2ID", "Holiday3StartDay", "Holiday3StartMonth",
-                "Holiday3StartHour", "Holiday3EndDay", "Holiday3EndMonth",
-                "Holiday3EndHour", "Holiday3Enabled", "Holiday3ID",
-                "Holiday4StartDay", "Holiday4StartMonth", "Holiday4StartHour",
-                "Holiday4EndDay", "Holiday4EndMonth", "Holiday4EndHour",
-                "Holiday4Enabled", "Holiday4ID", "HolidayEnabledCount",
-                "SummerStartDay", "SummerStartMonth", "SummerEndDay",
-                "SummerEndMonth", "SummerEnabled", "WindowOpenTrigger",
-                "WindowOpenTimer", "tempsensor", "Roomtemp", "ExtTempsensorID",
-                "Offset", "validate", "xhr", "useajax"
-            ]
         else:
             data_dict = data_dict | {
                 'xhr': '1',
@@ -197,39 +173,16 @@ class FritzAdvancedThermostat(object):
                 'apply': '',
                 'oldpage': '/net/home_auto_hkr_edit.lua'
             }
-            key_list = [
-                "xhr", "sid", "lang", "device", "view", "back_to_page",
-                "ule_device_name", "locklocal", "lockuiapp", "Heiztemp",
-                "Absenktemp", "graphState", "timer_item_0", "timer_item_1",
-                "Holidaytemp", "Holiday1StartDay", "Holiday1StartMonth",
-                "Holiday1StartHour", "Holiday1EndDay", "Holiday1EndMonth",
-                "Holiday1EndHour", "Holiday1Enabled", "Holiday1ID",
-                "Holiday2StartDay", "Holiday2StartMonth", "Holiday2StartHour",
-                "Holiday2EndDay", "Holiday2EndMonth", "Holiday2EndHour",
-                "Holiday2Enabled", "Holiday2ID", "Holiday3StartDay",
-                "Holiday3StartMonth", "Holiday3StartHour", "Holiday3EndDay",
-                "Holiday3EndMonth", "Holiday3EndHour", "Holiday3Enabled",
-                "Holiday3ID", "Holiday4StartDay", "Holiday4StartMonth",
-                "Holiday4StartHour", "Holiday4EndDay", "Holiday4EndMonth",
-                "Holiday4EndHour", "Holiday4Enabled", "Holiday4ID",
-                "HolidayEnabledCount", "SummerStartDay", "SummerStartMonth",
-                "SummerEndDay", "SummerEndMonth", "SummerEnabled",
-                "WindowOpenTrigger", "WindowOpenTimer", "tempsensor",
-                "Roomtemp", "ExtTempsensorID", "Offset", "apply", "oldpage"
-            ]
 
-        # Get key value pairs in the right order:
         data_pkg = []
-        for key in key_list:
-            if key in data_dict.keys():
-                value = data_dict[key]
-                if isinstance(value, bool):
-                    if value:
-                        data_pkg.append(key + '=on')
-                    else:
-                        data_pkg.append(key + '=off')
+        for key, value in data_dict.items():
+            if isinstance(value, bool):
+                if value:
+                    data_pkg.append(key + '=on')
                 else:
-                    data_pkg.append(key + '=' + quote(str(value), safe=''))
+                    data_pkg.append(key + '=off')
+            else:
+                data_pkg.append(key + '=' + quote(str(value), safe=''))
         return '&'.join(data_pkg)
 
     def commit(self, device_name):
