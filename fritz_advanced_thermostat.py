@@ -1,3 +1,4 @@
+from time import sleep
 import requests
 import re
 import json
@@ -13,13 +14,17 @@ from pyfritzhome import Fritzhome
 class FritzAdvancedThermostatError(Exception):
     pass
 
+
 class FritzAdvancedThermostatKeyError(KeyError):
     pass
+
 
 class FritzAdvancedThermostatConnectionError(ConnectionError):
     pass
 
+
 class FritzAdvancedThermostat(object):
+
     def __init__(self, host, user, password, ssl_verify=False):
         self._fritz_home = Fritzhome(host, user, password, ssl_verify)
         self._fritz_home.login()
@@ -53,17 +58,17 @@ class FritzAdvancedThermostat(object):
         ]
 
     def _get_supported_thermostats(self):
-        return [ 'FRITZ!DECT 301' ]
+        return ['FRITZ!DECT 301']
 
     def _get_supported_firmware(self):
-        return [ 'FRITZ!OS ' ]
+        return ['7.29']
 
     def _get_device_id_by_name(self, device_name):
         for dev in self._devices.values():
             if dev.name == device_name:
                 return dev.identifier
 
-    def _load_raw_thermostat_data(self, device_name, reload_device):
+    def _load_raw_thermostat_data(self, device_name, reload_device=False):
         if device_name not in self._thermostat_data.keys() or reload_device:
             self._scrape_thermostat_data(device_name)
 
@@ -91,6 +96,7 @@ class FritzAdvancedThermostat(object):
         # Wait until site is fully loaded
         WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.ID, "uiNumUp:Roomtemp")))
+        sleep(0.5)
         driver.execute_script('var gOrigValues = {}; getOrigValues()')
         thermostat_data = driver.execute_script('return gOrigValues')
         room_temp = driver.execute_script(
@@ -107,10 +113,14 @@ class FritzAdvancedThermostat(object):
                 if key in self._thermostat_data[device_name].keys():
                     self._thermostat_data[device_name][key] = value
                 else:
-                    raise FritzAdvancedThermostatKeyError('Error:\n' + key + ' is not available for: ' + device_name)
+                    raise FritzAdvancedThermostatKeyError(
+                        'Error:\n' + key + ' is not available for: ' +
+                        device_name)
             else:
-                raise FritzAdvancedThermostatKeyError('Error:\n' + key + ' is not in:\n' + ' '.join(self._get_settable_keys()))
-            
+                raise FritzAdvancedThermostatKeyError(
+                    'Error:\n' + key + ' is not in:\n' +
+                    ' '.join(self._get_settable_keys()))
+
     def _generate_headers(self, data):
         headers = {
             "Accept": "*/*",
@@ -129,28 +139,97 @@ class FritzAdvancedThermostat(object):
 
     def _generate_data_pkg(self, device_name, dry_run=True):
         self._load_raw_thermostat_data(device_name)
-        data_pkg = [
-            "sid=" + self._sid,
-            "device=" + self._get_device_id_by_name(device_name), "view=",
-            "back_to_page=sh_dev", "ule_device_name=" + device_name,
-            "graphState=1", "tempsensor=own", "ExtTempsensorID=tochoose"
-        ]
-        
+        key_list = None
+        data_dict = {
+            "sid": self._sid,
+            "device": self._get_device_id_by_name(device_name),
+            "view": '',
+            "back_to_page": "sh_dev",
+            "ule_device_name": device_name,
+            "graphState": "1",
+            "tempsensor": "own",
+            "ExtTempsensorID": "tochoose"
+        }
+        data_dict = data_dict | self._thermostat_data[device_name]
+        holiday_enabled_count = str(
+            sum([
+                int(y) for x, y in self._thermostat_data[device_name].items()
+                if re.search(r"Holiday\dEnabled", x)
+            ]))
         holiday_enabled_count = 0
+        holiday_count = 1
         for key, value in self._thermostat_data[device_name].items():
-            data_pkg.append(key + '=' + quote(str(value)))
-            if re.match(r"Holiday\dEnabled", key):
-                holiday_enabled_count += 1
-        data_pkg.append("HolidayEnabledCount=" + str(holiday_enabled_count))
-
+            if re.search(r"Holiday\dEnabled", key):
+                holiday_enabled_count += int(value)
+                data_dict['Holiday' + str(holiday_count) + 'ID'] = holiday_count
+                holiday_count += 1
+        data_dict['HolidayEnabledCount'] = holiday_enabled_count
         if dry_run:
-            data_pkg += ['validate=apply', 'xhr=1', 'useajax=1']
+            data_dict = data_dict | {
+                'validate': 'apply',
+                'xhr': '1',
+                'useajax': '1'
+            }
+            key_list = [
+                "sid", "device", "view", "back_to_page", "ule_device_name",
+                "locklocal", "lockuiapp", "Heiztemp", "Absenktemp",
+                "graphState", "timer_item_0", "timer_item_1", "Holidaytemp",
+                "Holiday1StartDay", "Holiday1StartMonth", "Holiday1StartHour",
+                "Holiday1EndDay", "Holiday1EndMonth", "Holiday1EndHour",
+                "Holiday1Enabled", "Holiday1ID", "Holiday2StartDay",
+                "Holiday2StartMonth", "Holiday2StartHour", "Holiday2EndDay",
+                "Holiday2EndMonth", "Holiday2EndHour", "Holiday2Enabled",
+                "Holiday2ID", "Holiday3StartDay", "Holiday3StartMonth",
+                "Holiday3StartHour", "Holiday3EndDay", "Holiday3EndMonth",
+                "Holiday3EndHour", "Holiday3Enabled", "Holiday3ID",
+                "Holiday4StartDay", "Holiday4StartMonth", "Holiday4StartHour",
+                "Holiday4EndDay", "Holiday4EndMonth", "Holiday4EndHour",
+                "Holiday4Enabled", "Holiday4ID", "HolidayEnabledCount",
+                "SummerStartDay", "SummerStartMonth", "SummerEndDay",
+                "SummerEndMonth", "SummerEnabled", "WindowOpenTrigger",
+                "WindowOpenTimer", "tempsensor", "Roomtemp", "ExtTempsensorID",
+                "Offset", "validate", "xhr", "useajax"
+            ]
         else:
-            data_pkg += [
-                'xhr=1', 'lang=de', 'apply=',
-                'oldpage=%2Fnet%2Fhome_auto_hkr_edit.lua'
+            data_dict = data_dict | {
+                'xhr': '1',
+                'lang': 'de',
+                'apply': '',
+                'oldpage': '/net/home_auto_hkr_edit.lua'
+            }
+            key_list = [
+                "xhr", "sid", "lang", "device", "view", "back_to_page",
+                "ule_device_name", "locklocal", "lockuiapp", "Heiztemp",
+                "Absenktemp", "graphState", "timer_item_0", "timer_item_1",
+                "Holidaytemp", "Holiday1StartDay", "Holiday1StartMonth",
+                "Holiday1StartHour", "Holiday1EndDay", "Holiday1EndMonth",
+                "Holiday1EndHour", "Holiday1Enabled", "Holiday1ID",
+                "Holiday2StartDay", "Holiday2StartMonth", "Holiday2StartHour",
+                "Holiday2EndDay", "Holiday2EndMonth", "Holiday2EndHour",
+                "Holiday2Enabled", "Holiday2ID", "Holiday3StartDay",
+                "Holiday3StartMonth", "Holiday3StartHour", "Holiday3EndDay",
+                "Holiday3EndMonth", "Holiday3EndHour", "Holiday3Enabled",
+                "Holiday3ID", "Holiday4StartDay", "Holiday4StartMonth",
+                "Holiday4StartHour", "Holiday4EndDay", "Holiday4EndMonth",
+                "Holiday4EndHour", "Holiday4Enabled", "Holiday4ID",
+                "HolidayEnabledCount", "SummerStartDay", "SummerStartMonth",
+                "SummerEndDay", "SummerEndMonth", "SummerEnabled",
+                "WindowOpenTrigger", "WindowOpenTimer", "tempsensor",
+                "Roomtemp", "ExtTempsensorID", "Offset", "apply", "oldpage"
             ]
 
+        # Get key value pairs in the right order:
+        data_pkg = []
+        for key in key_list:
+            if key in data_dict.keys():
+                value = data_dict[key]
+                if isinstance(value, bool):
+                    if value:
+                        data_pkg.append(key + '=on')
+                    else:
+                        data_pkg.append(key + '=off')
+                else:
+                    data_pkg.append(key + '=' + quote(str(value), safe=''))
         return '&'.join(data_pkg)
 
     def commit(self, device_name):
@@ -177,10 +256,11 @@ class FritzAdvancedThermostat(object):
                         check = json.loads(response.text)
                         if check['pid'] != 'sh_dev':
                             err = 'Error: Something went wrong setting the thermostat values'
-                            err = '\n' + dry_run_response.text
+                            err = '\n' + response.text
                             raise FritzAdvancedThermostatError(err)
                     else:
-                        raise FritzAdvancedThermostatConnectionError('Error: ' + str(response.status_code))
+                        raise FritzAdvancedThermostatConnectionError(
+                            'Error: ' + str(response.status_code))
                 else:
                     err = 'Error in: ' + ','.join(dry_run_check['tomark'])
                     err += '\n' + dry_run_check['alert']
@@ -194,14 +274,40 @@ class FritzAdvancedThermostat(object):
                     err += '\n' + dry_run_response.text
                 raise FritzAdvancedThermostatError(err)
         else:
-            raise FritzAdvancedThermostatConnectionError('Error: ' + str(dry_run_response.status_code))
+            raise FritzAdvancedThermostatConnectionError(
+                'Error: ' + str(dry_run_response.status_code))
 
     def set_thermostat_offset(self, device_name, offset):
         self._set_thermostat_values(device_name, Offset=str(offset))
 
     def get_thermostat_offset(self, device_name, reload_device=False):
-        self._load_raw_thermostat_data(device_name, reload_device)
+        self._load_raw_thermostat_data(device_name,
+                                       reload_device=reload_device)
         return self._thermostat_data[device_name]['Offset']
-    
+
     def get_thermostats(self):
-        return [x.name for x in self._devices.values() if x.productname in self._get_supported_thermostats()]
+        return [
+            x.name for x in self._devices.values()
+            if x.productname in self._get_supported_thermostats()
+        ]
+
+
+#TODO: Implement
+
+    def set_hollidays(self):
+        pass
+
+    def get_hollidays(self):
+        pass
+
+    def set_summer(self):
+        pass
+
+    def get_summer(self):
+        pass
+
+    def set_lock(self):
+        pass
+
+    def get_lock(self):
+        pass
