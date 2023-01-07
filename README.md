@@ -6,14 +6,12 @@ For basic settings use [Heikos (hthiery)](https://github.com/hthiery) amazing [p
 
 ## Disclaimer
 
-This library will always be hacky and will never leave a "beta state".
-
-It uses undocumented API's and selenium for data scraping.
+This library will always be hacky and will never leave the "beta state", sinc it uses undocumented API's and selenium for data scraping.
 I use this library myself and I give my best to keep it updated.
 
-But beware with any FritzOS upgrade this library might stop working, don't uses this if you can't live with that!
+But with any FritzOS upgrade this library might stop working, don't uses this if you can't live with that!
 
-**Also Remember:** I'm doing this for **free** as a **hobby**!
+**Remember:** I'm doing this for **free** as a **hobby**, so be nice!
 
 ## Tested configurations
 
@@ -51,7 +49,7 @@ try:
     for dev in devices:
         print('Device name: ' + dev)
 
-    device_name = 'Nils'
+    device_name = devices[0]
     current_offset = fat.get_thermostat_offset(device_name)
     print('Current offset of ' + device_name + ': ' + str(current_offset))
     fat.set_thermostat_offset(device_name, current_offset + 1)
