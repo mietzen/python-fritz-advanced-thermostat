@@ -17,27 +17,25 @@ import logging
 class FritzAdvancedThermostat(object):
 
     def __init__(self, host, user, password, ssl_verify=False, experimental=False):
-        self._fh = Fritzhome(host, user, password, ssl_verify)
-        self._fh.login()
-        self._fh.update_devices()
-        self._fc = FritzConnection(address=host, user=user, password=password)
-        self._supported_firmware = ['7.29']
-        self._experimental = experimental
-        if self._experimental:
+        if experimental:
             logging.warning('Experimental mode! All checks disabled!')
-        if not self._fc.system_version in self._supported_firmware:
-            if self._experimental:
-                logging.warning('You\'re using an untested firmware!')
-            else:
-                err = 'Error: Firmenware ' + self._fc.system_version + 'is unsupported'
-                logging.error(err)
-                raise FritzAdvancedThermostatCompatibilityError(err)
-        self._sid = self._fh._sid
+        fh = Fritzhome(host, user, password, ssl_verify)
+        fh.login()
+        fh.update_devices()
+        self._sid = fh._sid
+        self._devices = fh._devices
+        self._prefixed_host = fh.get_prefixed_host()
+        
+        fc = FritzConnection(address=host, user=user, password=password)
+        self._fritzos = fc.system_version
+        self._supported_firmware = ['7.29']
+        self._check_fritzos()
+
+        self._experimental = experimental
         self._user = user
         self._password = password
         self._ssl_verify = ssl_verify
-        self._devices = self._fh._devices
-        self._prefixed_host = self._fh.get_prefixed_host()
+
         self._thermostat_data = {}
         self._valid_device_types = ['Heizkörperregler']
         self._settable_keys = [
@@ -57,9 +55,22 @@ class FritzAdvancedThermostat(object):
         ]
         self._supported_thermostats = ['FRITZ!DECT 301']
         self._thermostats = []
+        
         self._selenium_options = Options()
         self._selenium_options.headless = True
         self._selenium_options.add_argument("--window-size=1920,1200")
+        if not self._ssl_verify:
+            self._selenium_options.add_argument('ignore-certificate-errors')
+
+
+    def _check_fritzos(self):
+        if not self._fritzos in self._supported_firmware:
+            if self._experimental:
+                logging.warning('You\'re using an untested firmware!')
+            else:
+                err = 'Error: Firmenware ' + self._fritzos + 'is unsupported'
+                logging.error(err)
+                raise FritzAdvancedThermostatCompatibilityError(err)
 
     def _check_device_name(self, device_name):
         if device_name not in self.get_thermostats():
