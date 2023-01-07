@@ -10,20 +10,22 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from time import sleep
 from urllib.parse import quote
+import logging
 
-#TODO: Logger!
 
-class FritzAdvancedThermostatError(Exception):
+class FritzAdvancedThermostatExecutionError(Exception):
     pass
 
+class FritzAdvancedThermostatCompatibilityError(Exception):
+    pass
 
 class FritzAdvancedThermostatKeyError(KeyError):
     pass
 
-
 class FritzAdvancedThermostatConnectionError(ConnectionError):
     pass
 
+FritzAdvancedThermostatError = (FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatKeyError, FritzAdvancedThermostatConnectionError)
 
 class FritzAdvancedThermostat(object):
 
@@ -34,9 +36,15 @@ class FritzAdvancedThermostat(object):
         self._fc = FritzConnection(address=host, user=user, password=password)
         self._supported_firmware = ['7.29']
         self._experimental = experimental
+        if self._experimental:
+            logging.warning('Experimental mode! All checks disabled!')
         if not self._fc.system_version in self._supported_firmware:
-            if not self._experimental:
-                raise FritzAdvancedThermostatError('Error: Firmenware ' + self._fc.system_version + 'is unsupported')
+            if self._experimental:
+                logging.warning('You\'re using an untested firmware!')
+            else:
+                err = 'Error: Firmenware ' + self._fc.system_version + 'is unsupported'
+                logging.error(err)
+                raise FritzAdvancedThermostatCompatibilityError(err)
         self._sid = self._fh._sid
         self._user = user
         self._password = password
@@ -68,9 +76,10 @@ class FritzAdvancedThermostat(object):
 
     def _check_device_name(self, device_name):
         if device_name not in self.get_thermostats():
-            err = 'Error:\n' + device_name + ' not found!\n' + \
+            err = 'Error: ' + device_name + ' not found!\n' + \
                 'Available devices:' + ', '.join(self.get_thermostats())
-            raise FritzAdvancedThermostatError(err)
+            logging.error(err)
+            raise FritzAdvancedThermostatExecutionError(err)
 
     def _get_device_id_by_name(self, device_name):
         for dev in self._devices.values():
@@ -108,6 +117,12 @@ class FritzAdvancedThermostat(object):
                         grouped = True
                     row.find_element(By.TAG_NAME, "button").click()
                     break
+                else:
+                    err = 'Error: Can\'t find ' + ' or '.join(self._valid_device_types) + \
+                        '\in : ' + ' '.join(row_text)
+                    logging.error(err)
+                    FritzAdvancedThermostatKeyError(err)
+
         # Wait until site is fully loaded
         WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.ID, "uiNumUp:Roomtemp")))
@@ -132,13 +147,13 @@ class FritzAdvancedThermostat(object):
                 if key in self._thermostat_data[device_name].keys():
                     self._thermostat_data[device_name][key] = value
                 else:
-                    raise FritzAdvancedThermostatKeyError(
-                        'Error:\n' + key + ' is not available for: ' +
-                        device_name)
+                    err = 'Error: ' + key + ' is not available for: ' + device_name
+                    logging.error(err)
+                    raise FritzAdvancedThermostatKeyError(err)
             else:
-                raise FritzAdvancedThermostatKeyError(
-                    'Error:\n' + key + ' is not in:\n' +
-                    ' '.join(self._settable_keys))
+                err = 'Error: ' + key + ' is not in:\n' + ' '.join(self._settable_keys)
+                logging.error(err)
+                raise FritzAdvancedThermostatKeyError(err)
 
     def _generate_headers(self, data):
         headers = {
@@ -243,14 +258,17 @@ class FritzAdvancedThermostat(object):
                         if check['pid'] != 'sh_dev':
                             err = 'Error: Something went wrong setting the thermostat values'
                             err = '\n' + response.text
-                            raise FritzAdvancedThermostatError(err)
+                            logging.error(err)
+                            raise FritzAdvancedThermostatExecutionError(err)
                     else:
-                        raise FritzAdvancedThermostatConnectionError(
-                            'Error: ' + str(response.status_code))
+                        err = 'Error: ' + str(response.status_code)
+                        logging.error(err)
+                        raise FritzAdvancedThermostatConnectionError(err)
                 else:
                     err = 'Error in: ' + ','.join(dry_run_check['tomark'])
                     err += '\n' + dry_run_check['alert']
-                    raise FritzAdvancedThermostatError(err)
+                    logging.error(err)
+                    raise FritzAdvancedThermostatExecutionError(err)
             except json.decoder.JSONDecodeError:
                 if response:
                     err = 'Error: Something went wrong on setting the thermostat values'
@@ -258,10 +276,12 @@ class FritzAdvancedThermostat(object):
                 else:
                     err = 'Error: Something went wrong on dry run'
                     err += '\n' + dry_run_response.text
-                raise FritzAdvancedThermostatError(err)
+                logging.error(err)
+                raise FritzAdvancedThermostatExecutionError(err)
         else:
-            raise FritzAdvancedThermostatConnectionError(
-                'Error: ' + str(dry_run_response.status_code))
+            err = 'Error: ' + str(dry_run_response.status_code)
+            logging.error(err)
+            raise FritzAdvancedThermostatConnectionError()
 
     def set_thermostat_offset(self, device_name, offset):
         self._check_device_name(device_name)
@@ -279,6 +299,8 @@ class FritzAdvancedThermostat(object):
                 if self._experimental:
                     if dev.has_thermostat:
                         self._thermostats.append(dev.name)
+                        if dev.productname not in self._supported_thermostats:
+                            logging.warning(dev.name + ' - ' + dev.productname + ' is an untested devices!')
                 else:
                     if dev.productname in self._supported_thermostats:
                         self._thermostats.append(dev.name)
