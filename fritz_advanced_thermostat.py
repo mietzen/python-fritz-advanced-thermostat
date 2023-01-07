@@ -1,15 +1,17 @@
-from time import sleep
-import requests
-import re
 import json
-from urllib.parse import quote
+import re
+import requests
+from fritzconnection import FritzConnection
+from pyfritzhome import Fritzhome
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from pyfritzhome import Fritzhome
+from time import sleep
+from urllib.parse import quote
 
+#TODO: Logger!
 
 class FritzAdvancedThermostatError(Exception):
     pass
@@ -25,17 +27,24 @@ class FritzAdvancedThermostatConnectionError(ConnectionError):
 
 class FritzAdvancedThermostat(object):
 
-    def __init__(self, host, user, password, ssl_verify=False):
-        self._fritz_home = Fritzhome(host, user, password, ssl_verify)
-        self._fritz_home.login()
-        self._fritz_home.update_devices()
-        self._sid = self._fritz_home._sid
+    def __init__(self, host, user, password, ssl_verify=False, experimental=False):
+        self._fh = Fritzhome(host, user, password, ssl_verify)
+        self._fh.login()
+        self._fh.update_devices()
+        self._fc = FritzConnection(address=host, user=user, password=password)
+        self._supported_firmware = ['7.29']
+        self._experimental = experimental
+        if not self._fc.system_version in self._supported_firmware:
+            if not self._experimental:
+                raise FritzAdvancedThermostatError('Error: Firmenware ' + self._fc.system_version + 'is unsupported')
+        self._sid = self._fh._sid
         self._user = user
         self._password = password
         self._ssl_verify = ssl_verify
-        self._devices = self._fritz_home._devices
-        self._prefixed_host = self._fritz_home.get_prefixed_host()
+        self._devices = self._fh._devices
+        self._prefixed_host = self._fh.get_prefixed_host()
         self._thermostat_data = {}
+        self._valid_device_types = ['Heizkörperregler']
         self._settable_keys = [
             "Holiday1Enabled", "Holiday1EndDay", "Holiday1EndHour",
             "Holiday1EndMonth", "Holiday1StartDay", "Holiday1StartHour",
@@ -52,19 +61,15 @@ class FritzAdvancedThermostat(object):
             "locklocal", "lockuiapp"
         ]
         self._supported_thermostats = ['FRITZ!DECT 301']
-        self._supported_firmware = ['7.29']
-        self._thermostats = [
-            x.name for x in self._devices.values()
-            if x.productname in self._supported_thermostats
-        ]
+        self._thermostats = []
         self._selenium_options = Options()
         self._selenium_options.headless = True
         self._selenium_options.add_argument("--window-size=1920,1200")
 
     def _check_device_name(self, device_name):
-        if device_name not in self._thermostats:
+        if device_name not in self.get_thermostats():
             err = 'Error:\n' + device_name + ' not found!\n' + \
-                'Available devices:' + ', '.join(self._thermostats)
+                'Available devices:' + ', '.join(self.get_thermostats())
             raise FritzAdvancedThermostatError(err)
 
     def _get_device_id_by_name(self, device_name):
@@ -72,8 +77,8 @@ class FritzAdvancedThermostat(object):
             if dev.name == device_name:
                 return dev.identifier
 
-    def _load_raw_thermostat_data(self, device_name, reload_device=False):
-        if device_name not in self._thermostat_data.keys() or reload_device:
+    def _load_raw_thermostat_data(self, device_name, force_reload=False):
+        if device_name not in self._thermostat_data.keys() or force_reload:
             self._scrape_thermostat_data(device_name)
 
     def _scrape_thermostat_data(self, device_name):
@@ -93,21 +98,29 @@ class FritzAdvancedThermostat(object):
             EC.presence_of_element_located(
                 (By.CLASS_NAME, "v-grid-container")))
         rows = driver.find_elements(By.CLASS_NAME, "v-grid-container")
+        grouped = False
         for row in rows:
-            if device_name in row.text.split('\n'):
-                row.find_element(By.TAG_NAME, "button").click()
-                break
+            row_text = row.text.split('\n')
+            if device_name in row_text:
+                valid_device_type = any([True for x in row_text if x in self._valid_device_types])
+                if valid_device_type or self._experimental:
+                    if len(row_text) == 5:
+                        grouped = True
+                    row.find_element(By.TAG_NAME, "button").click()
+                    break
         # Wait until site is fully loaded
         WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.ID, "uiNumUp:Roomtemp")))
-        sleep(
-            0.5
-        )  # Sometimes we need to await a little longer even if all elements are loaded
+        # Sometimes we need to await a little longer even if all elements are loaded
+        sleep(0.5) 
         driver.execute_script('var gOrigValues = {}; getOrigValues()')
         thermostat_data = driver.execute_script('return gOrigValues')
+        # Find hidden Roomtemp value
         room_temp = driver.execute_script(
             'return jxl.find("input[type=hidden][name=Roomtemp]")[0][\'value\']'
         )
+        # Set group marker:
+        thermostat_data['Grouped'] = grouped
         thermostat_data['Roomtemp'] = room_temp
         driver.quit()
         self._thermostat_data[device_name] = thermostat_data
@@ -148,7 +161,7 @@ class FritzAdvancedThermostat(object):
         data_dict = {
             "sid": self._sid,
             "device": self._get_device_id_by_name(device_name),
-            "view": '',
+            "view": None,
             "back_to_page": "sh_dev",
             "ule_device_name": device_name,
             "graphState": "1",
@@ -157,15 +170,22 @@ class FritzAdvancedThermostat(object):
         }
         data_dict = data_dict | self._thermostat_data[device_name]
 
-        holiday_enabled_count = 0
+        holiday_enabled_count = None
         holiday_id_count = 1
         for key, value in self._thermostat_data[device_name].items():
             if re.search(r"Holiday\dEnabled", key):
-                holiday_enabled_count += int(value)
-                data_dict['Holiday' + str(holiday_id_count) +
-                          'ID'] = holiday_id_count
+                if value:
+                    holiday_enabled_count += int(value)
+                    data_dict['Holiday' + str(holiday_id_count) +
+                            'ID'] = holiday_id_count
+                else:
+                    data_dict['Holiday' + str(holiday_id_count) +
+                            'ID'] = ''
                 holiday_id_count += 1
-        data_dict['HolidayEnabledCount'] = holiday_enabled_count
+        if holiday_enabled_count:
+            data_dict['HolidayEnabledCount'] = holiday_enabled_count
+        else:
+            data_dict['HolidayEnabledCount'] = ''
 
         if dry_run:
             data_dict = data_dict | {
@@ -177,18 +197,27 @@ class FritzAdvancedThermostat(object):
             data_dict = data_dict | {
                 'xhr': '1',
                 'lang': 'de',
-                'apply': '',
+                'apply': None,
                 'oldpage': '/net/home_auto_hkr_edit.lua'
             }
-
+        # Remove timer if grouped, also remove group marker in either case
+        if data_dict['Grouped']:
+            for timer in re.findall(r'timer_item_\d', '|'.join(data_dict.keys())):
+                data_dict.pop(timer)
+            data_dict.pop('Grouped')
+        else:
+            data_dict.pop('Grouped')
+        
         data_pkg = []
         for key, value in data_dict.items():
-            if isinstance(value, bool):
+            if value is None:
+                data_pkg.append(key + '=')
+            elif isinstance(value, bool):
                 if value:
                     data_pkg.append(key + '=on')
                 else:
                     data_pkg.append(key + '=off')
-            else:
+            elif value:
                 data_pkg.append(key + '=' + quote(str(value), safe=''))
         return '&'.join(data_pkg)
 
@@ -242,15 +271,22 @@ class FritzAdvancedThermostat(object):
         self._check_device_name(device_name)
         self._set_thermostat_values(device_name, Offset=str(offset))
 
-    def get_thermostat_offset(self, device_name, reload_device=False):
+    def get_thermostat_offset(self, device_name, force_reload=False):
         self._check_device_name(device_name)
         self._load_raw_thermostat_data(device_name,
-                                       reload_device=reload_device)
+                                       force_reload=force_reload)
         return self._thermostat_data[device_name]['Offset']
 
     def get_thermostats(self):
+        if not self._thermostats:
+            for dev in self._devices.values():
+                if self._experimental:
+                    if dev.has_thermostat:
+                        self._thermostats.append(dev.name)
+                else:
+                    if dev.productname in self._supported_thermostats:
+                        self._thermostats.append(dev.name)
         return self._thermostats
-
 
 #TODO: Implement
 
