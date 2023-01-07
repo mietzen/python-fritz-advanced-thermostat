@@ -6,9 +6,6 @@ dist:
 	# pip install wheel twine
 	python setup.py sdist bdist_wheel
 
-testup:
-	twine upload -r testpypi dist/*
-
 up:
 	twine upload dist/*
 
