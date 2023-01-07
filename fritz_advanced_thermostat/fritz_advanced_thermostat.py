@@ -12,30 +12,32 @@ from selenium.webdriver.support import expected_conditions as EC
 from time import sleep
 from urllib.parse import quote
 import logging
+import sys
 
 
 class FritzAdvancedThermostat(object):
 
-    def __init__(self, host, user, password, ssl_verify=False, experimental=False):
+    def __init__(self, host, user, password, ssl_verify=False, experimental=False, log_level='warning'):
         if experimental:
-            logging.warning('Experimental mode! All checks disabled!')
+            self._logger.warning('Experimental mode! All checks disabled!')
+        # Get SID and devices from Fritzhome
         fh = Fritzhome(host, user, password, ssl_verify)
         fh.login()
         fh.update_devices()
         self._sid = fh._sid
         self._devices = fh._devices
         self._prefixed_host = fh.get_prefixed_host()
-        
+        # Check Fritz!OS via FritzConnection
         fc = FritzConnection(address=host, user=user, password=password)
         self._fritzos = fc.system_version
         self._supported_firmware = ['7.29']
         self._check_fritzos()
-
+        # Set basic properties
         self._experimental = experimental
         self._user = user
         self._password = password
         self._ssl_verify = ssl_verify
-
+        # Set data structures
         self._thermostat_data = {}
         self._valid_device_types = ['Heizkörperregler']
         self._settable_keys = [
@@ -55,28 +57,36 @@ class FritzAdvancedThermostat(object):
         ]
         self._supported_thermostats = ['FRITZ!DECT 301']
         self._thermostats = []
-        
+        # Setup selenium options
         self._selenium_options = Options()
         self._selenium_options.headless = True
         self._selenium_options.add_argument("--window-size=1920,1200")
         if not self._ssl_verify:
             self._selenium_options.add_argument('ignore-certificate-errors')
+        # Setup logger
+        self._logger = logging.getLogger()
+        self._logger.setLevel(log_level.upper())
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(self._logger.level)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S')
+        handler.setFormatter(formatter)
+        self._logger.addHandler(handler)
 
 
     def _check_fritzos(self):
         if not self._fritzos in self._supported_firmware:
             if self._experimental:
-                logging.warning('You\'re using an untested firmware!')
+                self._logger.warning('You\'re using an untested firmware!')
             else:
                 err = 'Error: Firmenware ' + self._fritzos + 'is unsupported'
-                logging.error(err)
+                self._logger.error(err)
                 raise FritzAdvancedThermostatCompatibilityError(err)
 
     def _check_device_name(self, device_name):
         if device_name not in self.get_thermostats():
             err = 'Error: ' + device_name + ' not found!\n' + \
                 'Available devices:' + ', '.join(self.get_thermostats())
-            logging.error(err)
+            self._logger.error(err)
             raise FritzAdvancedThermostatExecutionError(err)
 
     def _get_device_id_by_name(self, device_name):
@@ -118,9 +128,8 @@ class FritzAdvancedThermostat(object):
                 else:
                     err = 'Error: Can\'t find ' + ' or '.join(self._valid_device_types) + \
                         '\in : ' + ' '.join(row_text)
-                    logging.error(err)
+                    self._logger.error(err)
                     FritzAdvancedThermostatKeyError(err)
-
         # Wait until site is fully loaded
         WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.ID, "uiNumUp:Roomtemp")))
@@ -146,11 +155,11 @@ class FritzAdvancedThermostat(object):
                     self._thermostat_data[device_name][key] = value
                 else:
                     err = 'Error: ' + key + ' is not available for: ' + device_name
-                    logging.error(err)
+                    self._logger.error(err)
                     raise FritzAdvancedThermostatKeyError(err)
             else:
                 err = 'Error: ' + key + ' is not in:\n' + ' '.join(self._settable_keys)
-                logging.error(err)
+                self._logger.error(err)
                 raise FritzAdvancedThermostatKeyError(err)
 
     def _generate_headers(self, data):
@@ -256,16 +265,16 @@ class FritzAdvancedThermostat(object):
                         if check['pid'] != 'sh_dev':
                             err = 'Error: Something went wrong setting the thermostat values'
                             err = '\n' + response.text
-                            logging.error(err)
+                            self._logger.error(err)
                             raise FritzAdvancedThermostatExecutionError(err)
                     else:
                         err = 'Error: ' + str(response.status_code)
-                        logging.error(err)
+                        self._logger.error(err)
                         raise FritzAdvancedThermostatConnectionError(err)
                 else:
                     err = 'Error in: ' + ','.join(dry_run_check['tomark'])
                     err += '\n' + dry_run_check['alert']
-                    logging.error(err)
+                    self._logger.error(err)
                     raise FritzAdvancedThermostatExecutionError(err)
             except json.decoder.JSONDecodeError:
                 if response:
@@ -274,18 +283,18 @@ class FritzAdvancedThermostat(object):
                 else:
                     err = 'Error: Something went wrong on dry run'
                     err += '\n' + dry_run_response.text
-                logging.error(err)
+                self._logger.error(err)
                 raise FritzAdvancedThermostatExecutionError(err)
         else:
             err = 'Error: ' + str(dry_run_response.status_code)
-            logging.error(err)
+            self._logger.error(err)
             raise FritzAdvancedThermostatConnectionError()
 
     def set_thermostat_offset(self, device_name, offset):
         self._check_device_name(device_name)
         if not (offset*2).is_integer():
             offset = round(offset*2)/2
-            logging.warning('Offset must be entered in 0.5 steps! Your offset was rounded to: ' + str(offset))
+            self._logger.warning('Offset must be entered in 0.5 steps! Your offset was rounded to: ' + str(offset))
         self._set_thermostat_values(device_name, Offset=str(offset))
 
     def get_thermostat_offset(self, device_name, force_reload=False):
@@ -301,7 +310,7 @@ class FritzAdvancedThermostat(object):
                     if dev.has_thermostat:
                         self._thermostats.append(dev.name)
                         if dev.productname not in self._supported_thermostats:
-                            logging.warning(dev.name + ' - ' + dev.productname + ' is an untested devices!')
+                            self._logger.warning(dev.name + ' - ' + dev.productname + ' is an untested devices!')
                 else:
                     if dev.productname in self._supported_thermostats:
                         self._thermostats.append(dev.name)
