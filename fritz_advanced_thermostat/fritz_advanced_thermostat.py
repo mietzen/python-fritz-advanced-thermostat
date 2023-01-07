@@ -17,7 +17,33 @@ import sys
 
 class FritzAdvancedThermostat(object):
 
-    def __init__(self, host, user, password, ssl_verify=False, experimental=False, log_level='warning'):
+    def __init__(self,
+                 host,
+                 user,
+                 password,
+                 ssl_verify=False,
+                 experimental=False,
+                 log_level='warning'):
+        # Setup logger
+        self._logger = logging.getLogger()
+        self._logger.setLevel(log_level.upper())
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(self._logger.level)
+        formatter = logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S')
+        handler.setFormatter(formatter)
+        self._logger.addHandler(handler)
+
+        if sys.version_info[0] == 3 and sys.version_info[1] >= 9:
+            self._logger.info('Python version: ' +
+                              '.'.join([str(x)
+                                        for x in sys.version_info[0:3]]))
+        else:
+            err = 'Error: Update Python!\nPython version: ' + '.'.join([str(x) for x in sys.version_info[0:3]]) + '\n'\
+                'Min. required Python version: 3.9.0'
+            self._logger.error(err)
+            raise FritzAdvancedThermostatExecutionError(err)
+
         if experimental:
             self._logger.warning('Experimental mode! All checks disabled!')
         # Get SID and devices from Fritzhome
@@ -63,15 +89,6 @@ class FritzAdvancedThermostat(object):
         self._selenium_options.add_argument("--window-size=1920,1200")
         if not self._ssl_verify:
             self._selenium_options.add_argument('ignore-certificate-errors')
-        # Setup logger
-        self._logger = logging.getLogger()
-        self._logger.setLevel(log_level.upper())
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setLevel(self._logger.level)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S')
-        handler.setFormatter(formatter)
-        self._logger.addHandler(handler)
-
 
     def _check_fritzos(self):
         if not self._fritzos in self._supported_firmware:
@@ -119,7 +136,8 @@ class FritzAdvancedThermostat(object):
         for row in rows:
             row_text = row.text.split('\n')
             if device_name in row_text:
-                valid_device_type = any([True for x in row_text if x in self._valid_device_types])
+                valid_device_type = any(
+                    [True for x in row_text if x in self._valid_device_types])
                 if valid_device_type or self._experimental:
                     if len(row_text) == 5:
                         grouped = True
@@ -134,7 +152,7 @@ class FritzAdvancedThermostat(object):
         WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.ID, "uiNumUp:Roomtemp")))
         # Sometimes we need to await a little longer even if all elements are loaded
-        sleep(0.5) 
+        sleep(0.5)
         driver.execute_script('var gOrigValues = {}; getOrigValues()')
         thermostat_data = driver.execute_script('return gOrigValues')
         # Find hidden Roomtemp value
@@ -158,7 +176,8 @@ class FritzAdvancedThermostat(object):
                     self._logger.error(err)
                     raise FritzAdvancedThermostatKeyError(err)
             else:
-                err = 'Error: ' + key + ' is not in:\n' + ' '.join(self._settable_keys)
+                err = 'Error: ' + key + ' is not in:\n' + ' '.join(
+                    self._settable_keys)
                 self._logger.error(err)
                 raise FritzAdvancedThermostatKeyError(err)
 
@@ -199,7 +218,7 @@ class FritzAdvancedThermostat(object):
                 if value:
                     holiday_enabled_count += int(value)
                     data_dict['Holiday' + str(holiday_id_count) +
-                            'ID'] = holiday_id_count
+                              'ID'] = holiday_id_count
                     holiday_id_count += 1
         if holiday_enabled_count:
             data_dict['HolidayEnabledCount'] = str(holiday_enabled_count)
@@ -219,13 +238,14 @@ class FritzAdvancedThermostat(object):
             }
         # Remove timer if grouped, also remove group marker in either case
         if data_dict['Grouped']:
-            for timer in re.findall(r'timer_item_\d', '|'.join(data_dict.keys())):
+            for timer in re.findall(r'timer_item_\d',
+                                    '|'.join(data_dict.keys())):
                 data_dict.pop(timer)
             data_dict.pop('graphState')
             data_dict.pop('Grouped')
         else:
             data_dict.pop('Grouped')
-        
+
         data_pkg = []
         for key, value in data_dict.items():
             if value is None:
@@ -292,15 +312,16 @@ class FritzAdvancedThermostat(object):
 
     def set_thermostat_offset(self, device_name, offset):
         self._check_device_name(device_name)
-        if not (offset*2).is_integer():
-            offset = round(offset*2)/2
-            self._logger.warning('Offset must be entered in 0.5 steps! Your offset was rounded to: ' + str(offset))
+        if not (offset * 2).is_integer():
+            offset = round(offset * 2) / 2
+            self._logger.warning(
+                'Offset must be entered in 0.5 steps! Your offset was rounded to: '
+                + str(offset))
         self._set_thermostat_values(device_name, Offset=str(offset))
 
     def get_thermostat_offset(self, device_name, force_reload=False):
         self._check_device_name(device_name)
-        self._load_raw_thermostat_data(device_name,
-                                       force_reload=force_reload)
+        self._load_raw_thermostat_data(device_name, force_reload=force_reload)
         return float(self._thermostat_data[device_name]['Offset'])
 
     def get_thermostats(self):
@@ -310,7 +331,9 @@ class FritzAdvancedThermostat(object):
                     if dev.has_thermostat:
                         self._thermostats.append(dev.name)
                         if dev.productname not in self._supported_thermostats:
-                            self._logger.warning(dev.name + ' - ' + dev.productname + ' is an untested devices!')
+                            self._logger.warning(dev.name + ' - ' +
+                                                 dev.productname +
+                                                 ' is an untested devices!')
                 else:
                     if dev.productname in self._supported_thermostats:
                         self._thermostats.append(dev.name)
@@ -335,5 +358,6 @@ class FritzAdvancedThermostat(object):
 
     def get_lock(self):
         pass
+
 
 #TODO: Look at timers
