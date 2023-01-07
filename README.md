@@ -6,7 +6,7 @@ For basic settings use [Heikos (hthiery)](https://github.com/hthiery) amazing [p
 
 ## Disclaimer
 
-This library will always be hacky and will never leave the "beta state", sinc it uses undocumented API's and selenium for data scraping.
+This library will always be hacky and will never leave the "beta state", since it uses undocumented API's and selenium for data scraping.
 I use this library myself and I give my best to keep it updated.
 
 But with any FritzOS upgrade this library might stop working, don't uses this if you can't live with that!
