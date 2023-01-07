@@ -13,6 +13,10 @@ But with any FritzOS upgrade this library might stop working, don't uses this if
 
 **Remember:** I'm doing this for **free** as a **hobby**, so be nice!
 
+## Requirements
+
+* Python 3.9.0 or higher
+
 ## Tested configurations
 
 |     Device     | Tested in FritzOS |
