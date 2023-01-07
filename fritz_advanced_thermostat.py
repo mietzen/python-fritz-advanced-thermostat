@@ -271,7 +271,7 @@ class FritzAdvancedThermostat(object):
         self._check_device_name(device_name)
         self._load_raw_thermostat_data(device_name,
                                        force_reload=force_reload)
-        return self._thermostat_data[device_name]['Offset']
+        return float(self._thermostat_data[device_name]['Offset'])
 
     def get_thermostats(self):
         if not self._thermostats:
@@ -303,3 +303,5 @@ class FritzAdvancedThermostat(object):
 
     def get_lock(self):
         pass
+
+#TODO: Look at timers
