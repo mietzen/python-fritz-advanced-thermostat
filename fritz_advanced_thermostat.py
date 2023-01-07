@@ -170,7 +170,7 @@ class FritzAdvancedThermostat(object):
         }
         data_dict = data_dict | self._thermostat_data[device_name]
 
-        holiday_enabled_count = None
+        holiday_enabled_count = 0
         holiday_id_count = 1
         for key, value in self._thermostat_data[device_name].items():
             if re.search(r"Holiday\dEnabled", key):
@@ -178,14 +178,9 @@ class FritzAdvancedThermostat(object):
                     holiday_enabled_count += int(value)
                     data_dict['Holiday' + str(holiday_id_count) +
                             'ID'] = holiday_id_count
-                else:
-                    data_dict['Holiday' + str(holiday_id_count) +
-                            'ID'] = ''
-                holiday_id_count += 1
+                    holiday_id_count += 1
         if holiday_enabled_count:
-            data_dict['HolidayEnabledCount'] = holiday_enabled_count
-        else:
-            data_dict['HolidayEnabledCount'] = ''
+            data_dict['HolidayEnabledCount'] = str(holiday_enabled_count)
 
         if dry_run:
             data_dict = data_dict | {
@@ -204,6 +199,7 @@ class FritzAdvancedThermostat(object):
         if data_dict['Grouped']:
             for timer in re.findall(r'timer_item_\d', '|'.join(data_dict.keys())):
                 data_dict.pop(timer)
+            data_dict.pop('graphState')
             data_dict.pop('Grouped')
         else:
             data_dict.pop('Grouped')
