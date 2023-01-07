@@ -15,7 +15,6 @@ But beware with any FritzOS upgrade this library might stop working, don't uses 
 
 **Also Remember:** I'm doing this for **free** as a **hobby**!
 
-
 ## Tested configurations
 
 |     Device     | Tested in FritzOS |
@@ -29,7 +28,7 @@ If you have a different device or FritzOS version set `experimental=True` this w
 Install using `pip`:
 
 ```shell
-pip install fritzadvancedthermostat
+pip install fritz-advanced-thermostat
 ```
 
 You will also need to [setup a user](https://github.com/hthiery/python-fritzhome#fritzbox-user).

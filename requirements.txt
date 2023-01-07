@@ -1,0 +1,4 @@
+fritzconnection>=1.10.3
+pyfritzhome>=0.6.7
+requests>=2.28.1
+selenium>=4.7.2

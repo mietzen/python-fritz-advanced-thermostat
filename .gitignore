@@ -1,4 +1,7 @@
-fritz-therostat-offset
+venv
 .vscode
 __pycache__
 local_test.py
+build
+dist
+*.egg-info

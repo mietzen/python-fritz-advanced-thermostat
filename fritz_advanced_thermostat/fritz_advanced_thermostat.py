@@ -1,6 +1,7 @@
 import json
 import re
 import requests
+from .errors import *
 from fritzconnection import FritzConnection
 from pyfritzhome import Fritzhome
 from selenium import webdriver
@@ -12,20 +13,6 @@ from time import sleep
 from urllib.parse import quote
 import logging
 
-
-class FritzAdvancedThermostatExecutionError(Exception):
-    pass
-
-class FritzAdvancedThermostatCompatibilityError(Exception):
-    pass
-
-class FritzAdvancedThermostatKeyError(KeyError):
-    pass
-
-class FritzAdvancedThermostatConnectionError(ConnectionError):
-    pass
-
-FritzAdvancedThermostatError = (FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatKeyError, FritzAdvancedThermostatConnectionError)
 
 class FritzAdvancedThermostat(object):
 
