@@ -85,7 +85,10 @@ class FritzAdvancedThermostat(object):
         self._thermostats = []
         # Setup selenium options
         self._selenium_options = Options()
-        self._selenium_options.headless = True
+        self._selenium_options.add_argument('--headless')
+        self._selenium_options.add_argument('--no-sandbox')
+        self._selenium_options.add_argument('--disable-gpu')
+        self._selenium_options.add_argument('--disable-dev-shm-usage')
         self._selenium_options.add_argument("--window-size=1920,1200")
         if not self._ssl_verify:
             self._selenium_options.add_argument('ignore-certificate-errors')
@@ -145,7 +148,7 @@ class FritzAdvancedThermostat(object):
                     break
                 else:
                     err = 'Error: Can\'t find ' + ' or '.join(self._valid_device_types) + \
-                        '\in : ' + ' '.join(row_text)
+                        ' in : ' + ' '.join(row_text)
                     self._logger.error(err)
                     FritzAdvancedThermostatKeyError(err)
         # Wait until site is fully loaded
@@ -259,56 +262,57 @@ class FritzAdvancedThermostat(object):
                 data_pkg.append(key + '=' + quote(str(value), safe=''))
         return '&'.join(data_pkg)
 
-    def commit(self, device_name):
-        self._check_device_name(device_name)
-        dry_run_url = '/'.join(
-            [self._prefixed_host, 'net', 'home_auto_hkr_edit.lua'])
-        set_url = '/'.join([self._prefixed_host, 'data.lua'])
-        dry_run_data = self._generate_data_pkg(device_name, dry_run=True)
-        set_data = self._generate_data_pkg(device_name, dry_run=False)
-        dry_run_response = requests.post(
-            dry_run_url,
-            headers=self._generate_headers(dry_run_data),
-            data=dry_run_data,
-            verify=self._ssl_verify)
-        if dry_run_response.status_code == 200:
-            try:
-                dry_run_check = json.loads(dry_run_response.text)
-                if dry_run_check['ok']:
-                    response = requests.post(
-                        set_url,
-                        headers=self._generate_headers(set_data),
-                        data=set_data,
-                        verify=self._ssl_verify)
-                    if response.status_code == 200:
-                        check = json.loads(response.text)
-                        if check['pid'] != 'sh_dev':
-                            err = 'Error: Something went wrong setting the thermostat values'
-                            err = '\n' + response.text
+    def commit(self):
+        for dev in self._thermostat_data.keys():
+            self._check_device_name(dev)
+            dry_run_url = '/'.join(
+                [self._prefixed_host, 'net', 'home_auto_hkr_edit.lua'])
+            set_url = '/'.join([self._prefixed_host, 'data.lua'])
+            dry_run_data = self._generate_data_pkg(dev, dry_run=True)
+            set_data = self._generate_data_pkg(dev, dry_run=False)
+            dry_run_response = requests.post(
+                dry_run_url,
+                headers=self._generate_headers(dry_run_data),
+                data=dry_run_data,
+                verify=self._ssl_verify)
+            if dry_run_response.status_code == 200:
+                try:
+                    dry_run_check = json.loads(dry_run_response.text)
+                    if dry_run_check['ok']:
+                        response = requests.post(
+                            set_url,
+                            headers=self._generate_headers(set_data),
+                            data=set_data,
+                            verify=self._ssl_verify)
+                        if response.status_code == 200:
+                            check = json.loads(response.text)
+                            if check['pid'] != 'sh_dev':
+                                err = 'Error: Something went wrong setting the thermostat values'
+                                err = '\n' + response.text
+                                self._logger.error(err)
+                                raise FritzAdvancedThermostatExecutionError(err)
+                        else:
+                            err = 'Error: ' + str(response.status_code)
                             self._logger.error(err)
-                            raise FritzAdvancedThermostatExecutionError(err)
+                            raise FritzAdvancedThermostatConnectionError(err)
                     else:
-                        err = 'Error: ' + str(response.status_code)
+                        err = 'Error in: ' + ','.join(dry_run_check['tomark'])
+                        err += '\n' + dry_run_check['alert']
                         self._logger.error(err)
-                        raise FritzAdvancedThermostatConnectionError(err)
-                else:
-                    err = 'Error in: ' + ','.join(dry_run_check['tomark'])
-                    err += '\n' + dry_run_check['alert']
+                        raise FritzAdvancedThermostatExecutionError(err)
+                except json.decoder.JSONDecodeError:
+                    if response:
+                        err = 'Error: Something went wrong on setting the thermostat values'
+                        err += '\n' + response.text
+                    else:
+                        err = 'Error: Something went wrong on dry run'
+                        err += '\n' + dry_run_response.text
                     self._logger.error(err)
                     raise FritzAdvancedThermostatExecutionError(err)
-            except json.decoder.JSONDecodeError:
-                if response:
-                    err = 'Error: Something went wrong on setting the thermostat values'
-                    err += '\n' + response.text
-                else:
-                    err = 'Error: Something went wrong on dry run'
-                    err += '\n' + dry_run_response.text
+            else:
+                err = 'Error: ' + str(dry_run_response.status_code)
                 self._logger.error(err)
-                raise FritzAdvancedThermostatExecutionError(err)
-        else:
-            err = 'Error: ' + str(dry_run_response.status_code)
-            self._logger.error(err)
-            raise FritzAdvancedThermostatConnectionError()
+                raise FritzAdvancedThermostatConnectionError()
 
     def set_thermostat_offset(self, device_name, offset):
         self._check_device_name(device_name)

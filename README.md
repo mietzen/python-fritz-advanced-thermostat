@@ -57,7 +57,7 @@ try:
     current_offset = fat.get_thermostat_offset(device_name)
     print('Current offset of ' + device_name + ': ' + str(current_offset))
     fat.set_thermostat_offset(device_name, current_offset + 1)
-    fat.commit(device_name)
+    fat.commit()
 
     new_offset = fat.get_thermostat_offset(device_name, force_reload=True)
     print('New offset of ' + device_name + ': ' + str(new_offset))
