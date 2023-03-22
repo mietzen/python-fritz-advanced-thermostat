@@ -256,8 +256,6 @@ class FritzAdvancedThermostat(object):
             elif isinstance(value, bool):
                 if value:
                     data_pkg.append(key + '=on')
-                else:
-                    data_pkg.append(key + '=off')
             elif value:
                 data_pkg.append(key + '=' + quote(str(value), safe=''))
         return '&'.join(data_pkg)
