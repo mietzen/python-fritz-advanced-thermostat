@@ -1,3 +1,10 @@
+# Disclaimer
+
+**This package is not related to or developed by AVM. No relationship between the developer of this package and AVM exists.**
+
+**All trademarks, logos and brand names are the property of their respective owners. All company, product and service names used in this package are for identification purposes only. Use of these names,trademarks and brands does not imply endorsement.**
+
+
 # Advanced Fritz Thermostat
 
 A library for setting the values [AHA requests](https://avm.de/fileadmin/user_upload/Global/Service/Schnittstellen/AHA-HTTP-Interface.pdf) won't let you!
