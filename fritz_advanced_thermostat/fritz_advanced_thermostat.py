@@ -185,7 +185,7 @@ class FritzAdvancedThermostat(object):
             except TimeoutException as exc:
                 self._scrape_thermostat_data_retries += 1
                 self._logger.warning('Connection timeout on opening thermostat: {}'.format(
-                        device_name)
+                        device_name))
                 if self._scrape_thermostat_data_retries < 3:
                     self._scrape_thermostat_data(device_name)
                 else:
