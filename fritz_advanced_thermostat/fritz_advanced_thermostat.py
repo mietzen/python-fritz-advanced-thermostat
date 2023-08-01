@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from time import sleep
 from urllib.parse import quote
 import logging
@@ -66,6 +67,7 @@ class FritzAdvancedThermostat(object):
         # Set data structures
         self._thermostat_data = {}
         self._valid_device_types = ['Heizkörperregler']
+        self._scrape_thermostat_data_retries = 0
         self._settable_keys = {
             "common": (
                 "Offset",
@@ -124,60 +126,72 @@ class FritzAdvancedThermostat(object):
             self._scrape_thermostat_data(device_name)
 
     def _scrape_thermostat_data(self, device_name):
-        driver = webdriver.Chrome(options=self._selenium_options)
-        driver.get(self._prefixed_host)
-        driver.find_element(By.ID, "uiViewUser").send_keys(self._user)
-        driver.find_element(By.ID, "uiPass").send_keys(self._password)
-        WebDriverWait(driver, 60).until(
-            EC.element_to_be_clickable((By.ID, "submitLoginBtn"))).click()
-        WebDriverWait(driver,
-                      60).until(EC.element_to_be_clickable(
-                          (By.ID, "sh_menu"))).click()
-        WebDriverWait(driver,
-                      60).until(EC.element_to_be_clickable(
-                          (By.ID, "sh_dev"))).click()
-        WebDriverWait(driver, 60).until(
-            EC.presence_of_element_located(
-                (By.CLASS_NAME, "v-grid-container")))
-        rows = driver.find_elements(By.CLASS_NAME, "v-grid-container")
-        grouped = False
-        for row in rows:
-            row_text = row.text.split('\n')
-            if device_name in row_text:
-                valid_device_type = any(
-                    [True for x in row_text if x in self._valid_device_types])
-                if valid_device_type or self._experimental:
-                    if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.29'):
-                        if len(row_text) == 5:
-                            grouped = True
-                    if version.parse('7.50') < version.parse(self._fritzos) <= version.parse('7.56'):
-                        if len(row_text) == 4:
-                            grouped = True
-                    row.find_element(By.TAG_NAME, "button").click()
-                    break
-                else:
-                    err = 'Error: Can\'t find ' + ' or '.join(self._valid_device_types) + \
-                        ' in : ' + ' '.join(row_text)
-                    FritzAdvancedThermostatKeyError(err)
-        # Wait until site is fully loaded
-        WebDriverWait(driver, 60).until(
-            EC.element_to_be_clickable((By.ID, "uiNumUp:Roomtemp")))
-        # Sometimes we need to wait a little longer even if all elements are loaded
-        sleep(0.5)
+        if self._scrape_thermostat_data_retries <= 3:
+            try:
+                driver = webdriver.Chrome(options=self._selenium_options)
+                driver.get(self._prefixed_host)
+                driver.find_element(By.ID, "uiViewUser").send_keys(self._user)
+                driver.find_element(By.ID, "uiPass").send_keys(self._password)
+                WebDriverWait(driver, 60).until(
+                    EC.element_to_be_clickable((By.ID, "submitLoginBtn"))).click()
+                WebDriverWait(driver,
+                              60).until(EC.element_to_be_clickable(
+                                  (By.ID, "sh_menu"))).click()
+                WebDriverWait(driver,
+                              60).until(EC.element_to_be_clickable(
+                                  (By.ID, "sh_dev"))).click()
+                WebDriverWait(driver, 60).until(
+                    EC.presence_of_element_located(
+                        (By.CLASS_NAME, "v-grid-container")))
+                rows = driver.find_elements(By.CLASS_NAME, "v-grid-container")
+                grouped = False
+                for row in rows:
+                    row_text = row.text.split('\n')
+                    if device_name in row_text:
+                        valid_device_type = any(
+                            [True for x in row_text if x in self._valid_device_types])
+                        if valid_device_type or self._experimental:
+                            if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.29'):
+                                if len(row_text) == 5:
+                                    grouped = True
+                            if version.parse('7.50') < version.parse(self._fritzos) <= version.parse('7.56'):
+                                if len(row_text) == 4:
+                                    grouped = True
+                            row.find_element(By.TAG_NAME, "button").click()
+                            break
+                        else:
+                            err = 'Error: Can\'t find ' + ' or '.join(self._valid_device_types) + \
+                                ' in : ' + ' '.join(row_text)
+                            FritzAdvancedThermostatKeyError(err)
+                # Wait until site is fully loaded
+                WebDriverWait(driver, 45).until(
+                    EC.element_to_be_clickable((By.ID, "uiNumUp:Roomtemp")))
+                # Sometimes we need to wait a little longer even if all elements are loaded
+                sleep(0.5)
 
-        # Find thermostat data
-        thermostat_data = {}
-        for key in self._settable_keys["common"]:
-            thermostat_data[key] = driver.execute_script(
-                "return jsl.find(\"input[name={0}]\")[0]['value']".format(key))
-        if not grouped:
-            for key in self._settable_keys["ungrouped"]:
-                thermostat_data[key] = driver.execute_script(
-                    "return jsl.find(\"input[name={0}]\")[0]['value']".format(key))
-        # Set group marker:
-        thermostat_data['Grouped'] = grouped
-        driver.quit()
-        self._thermostat_data[device_name] = thermostat_data
+                # Find thermostat data
+                thermostat_data = {}
+                for key in self._settable_keys["common"]:
+                    thermostat_data[key] = driver.execute_script(
+                        "return jsl.find(\"input[name={0}]\")[0]['value']".format(key))
+                if not grouped:
+                    for key in self._settable_keys["ungrouped"]:
+                        thermostat_data[key] = driver.execute_script(
+                            "return jsl.find(\"input[name={0}]\")[0]['value']".format(key))
+                # Set group marker:
+                thermostat_data['Grouped'] = grouped
+                driver.quit()
+                self._thermostat_data[device_name] = thermostat_data
+            except TimeoutException as exc:
+                self._scrape_thermostat_data_retries += 1
+                self._logger.warning('Connection timeout on opening thermostat: {}'.format(
+                        device_name)
+                if self._scrape_thermostat_data_retries < 3:
+                    self._scrape_thermostat_data(device_name)
+                else:
+                    err = 'Timeout! Tried 3 times to open thermostat: {}'.format(
+                        device_name)
+                    raise FritzAdvancedThermostatConnectionError(err) from exc
 
     def _set_thermostat_values(self, device_name, **kwargs):
         self._load_raw_thermostat_data(device_name)
