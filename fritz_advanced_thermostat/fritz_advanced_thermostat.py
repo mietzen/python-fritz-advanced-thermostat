@@ -1,7 +1,7 @@
 import json
 import re
 import requests
-from .errors import *
+from .errors import FritzAdvancedThermostatConnectionError, FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatKeyError
 from fritzconnection import FritzConnection
 from pyfritzhome import Fritzhome
 from selenium import webdriver
@@ -101,7 +101,7 @@ class FritzAdvancedThermostat(object):
         self._check_fritzos()
 
     def _check_fritzos(self):
-        if not self._fritzos in self._supported_firmware:
+        if self._fritzos not in self._supported_firmware:
             if self._experimental:
                 self._logger.warning('You\'re using an untested firmware!')
             else:
@@ -185,7 +185,7 @@ class FritzAdvancedThermostat(object):
             except TimeoutException as exc:
                 self._scrape_thermostat_data_retries += 1
                 self._logger.warning('Connection timeout on opening thermostat: {}'.format(
-                        device_name))
+                    device_name))
                 if self._scrape_thermostat_data_retries < 3:
                     self._scrape_thermostat_data(device_name)
                 else:
@@ -330,7 +330,7 @@ class FritzAdvancedThermostat(object):
             set_data = self._generate_data_pkg(dev, dry_run=False)
             retries = 0
             while retries <= 3:
-                try: 
+                try:
                     response = requests.post(
                         set_url,
                         headers=self._generate_headers(set_data),
@@ -343,8 +343,9 @@ class FritzAdvancedThermostat(object):
                     retries += 1
                     if retries > 3:
                         err = 'Tried 3 times, got Connection Error on setting thermostat: {}'.format(
-                                dev)
-                        raise FritzAdvancedThermostatConnectionError(err) from exc
+                            dev)
+                        raise FritzAdvancedThermostatConnectionError(
+                            err) from exc
 
             if response.status_code == 200:
                 check = json.loads(response.text)
