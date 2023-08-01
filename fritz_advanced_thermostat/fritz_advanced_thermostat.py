@@ -122,7 +122,7 @@ class FritzAdvancedThermostat(object):
                 return dev.identifier
 
     def _load_raw_thermostat_data(self, device_name, force_reload=False):
-        if device_name not in self._thermostat_data.keys() or force_reload:
+        if device_name not in self._thermostat_data or force_reload:
             self._scrape_thermostat_data(device_name)
 
     def _scrape_thermostat_data(self, device_name):
@@ -160,7 +160,6 @@ class FritzAdvancedThermostat(object):
                 else:
                     err = 'Error: Can\'t find ' + ' or '.join(self._valid_device_types) + \
                         ' in : ' + ' '.join(row_text)
-                    self._logger.error(err)
                     FritzAdvancedThermostatKeyError(err)
         # Wait until site is fully loaded
         WebDriverWait(driver, 60).until(
@@ -278,41 +277,50 @@ class FritzAdvancedThermostat(object):
         return '&'.join(data_pkg)
 
     def commit(self):
-
-        # TODO:
-        # 7.56 request:
-        # curl 'https://fritzbox-unten.admin-panel.lan/data.lua' \
-        #   -H 'authority: fritzbox-unten.admin-panel.lan' \
-        #   -H 'accept: */*' \
-        #   -H 'accept-language: en-GB,en-US;q=0.9,en;q=0.8,de;q=0.7' \
-        #   -H 'content-type: application/x-www-form-urlencoded' \
-        #   -H 'dnt: 1' \
-        #   -H 'origin: https://fritzbox-unten.admin-panel.lan' \
-        #   -H 'referer: https://fritzbox-unten.admin-panel.lan/' \
-        #   -H 'sec-ch-ua: "Not.A/Brand";v="8", "Chromium";v="114"' \
-        #   -H 'sec-ch-ua-mobile: ?0' \
-        #   -H 'sec-ch-ua-platform: "macOS"' \
-        #   -H 'sec-fetch-dest: empty' \
-        #   -H 'sec-fetch-mode: cors' \
-        #   -H 'sec-fetch-site: same-origin' \
-        #   -H 'sec-gpc: 1' \
-        #   -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36' \
-        #   --data-raw 'xhr=1&sid=e23331f488f95ab6&device=20000&view=&back_to_page=%2Fsmarthome%2Fdevices.lua&ule_device_name=Larissa&lockuiapp=on&Heiztemp=19.5&Absenktemp=7.5&graphState=1&timer_item_0=0800%3B1%3B127&timer_item_1=1800%3B0%3B127&Holidaytemp=18.5&Holiday1StartDay=1&Holiday1StartMonth=05&Holiday1StartHour=0&Holiday1EndDay=20&Holiday1EndMonth=05&Holiday1EndHour=23&Holiday1Enabled=1&Holiday1ID=1&Holiday2StartDay=31&Holiday2StartMonth=07&Holiday2StartHour=15&Holiday2EndDay=14&Holiday2EndMonth=08&Holiday2EndHour=15&Holiday2Enabled=0&Holiday2ID=2&Holiday3StartDay=31&Holiday3StartMonth=07&Holiday3StartHour=15&Holiday3EndDay=14&Holiday3EndMonth=08&Holiday3EndHour=15&Holiday3Enabled=0&Holiday3ID=3&Holiday4StartDay=31&Holiday4StartMonth=07&Holiday4StartHour=15&Holiday4EndDay=14&Holiday4EndMonth=08&Holiday4EndHour=15&Holiday4Enabled=0&Holiday4ID=4&HolidayEnabledCount=1&SummerStartDay=21&SummerStartMonth=05&SummerEndDay=15&SummerEndMonth=09&SummerEnabled=1&WindowOpenTrigger=4&WindowOpenTimer=90&tempsensor=own&Roomtemp=21&ExtTempsensorID=tochoose&Offset=0&apply=&lang=de&page=home_auto_hkr_edit' \
-        #   --compressed
-
-        for dev in self._thermostat_data.keys():
+        for dev in self._thermostat_data:
             self._check_device_name(dev)
+
+            # Dry run option is not available in 7.56 ???
             if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.29'):
-                pass
-                
-                
+                dry_run_url = '/'.join(
+                    [self._prefixed_host, 'net', 'home_auto_hkr_edit.lua'])
+                dry_run_data = self._generate_data_pkg(dev, dry_run=True)
+                dry_run_response = requests.post(
+                    dry_run_url,
+                    headers=self._generate_headers(dry_run_data),
+                    data=dry_run_data,
+                    verify=self._ssl_verify, timeout=120)
+                if dry_run_response.status_code == 200:
+                    try:
+                        dry_run_check = json.loads(dry_run_response.text)
+                        if not dry_run_check['ok']:
+                            err = 'Error in: ' + \
+                                ','.join(dry_run_check['tomark'])
+                            err += '\n' + dry_run_check['alert']
+                            self._logger.error(err)
+                            raise FritzAdvancedThermostatExecutionError(err)
+                    except json.decoder.JSONDecodeError as exc:
+                        if dry_run_response:
+                            err = 'Error: Something went wrong on setting the thermostat values'
+                            err += '\n' + dry_run_response.text
+                        else:
+                            err = 'Error: Something went wrong on dry run'
+                            err += '\n' + dry_run_response.text
+                        self._logger.error(err)
+                        raise FritzAdvancedThermostatExecutionError(
+                            err) from exc
+                else:
+                    err = 'Error: ' + str(dry_run_response.status_code)
+                    self._logger.error(err)
+                    raise FritzAdvancedThermostatConnectionError()
+
             set_url = '/'.join([self._prefixed_host, 'data.lua'])
             set_data = self._generate_data_pkg(dev, dry_run=False)
             response = requests.post(
                 set_url,
                 headers=self._generate_headers(set_data),
                 data=set_data,
-                verify=self._ssl_verify)
+                verify=self._ssl_verify, timeout=120)
             if response.status_code == 200:
                 check = json.loads(response.text)
                 if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.29'):
@@ -339,8 +347,7 @@ class FritzAdvancedThermostat(object):
         if not (offset * 2).is_integer():
             offset = round(offset * 2) / 2
             self._logger.warning(
-                'Offset must be entered in 0.5 steps! Your offset was rounded to: '
-                + str(offset))
+                'Offset must be entered in 0.5 steps! Your offset was rounded to: {}'.format(str(offset)))
         self._set_thermostat_values(device_name, Offset=str(offset))
 
     def get_thermostat_offset(self, device_name, force_reload=False):
