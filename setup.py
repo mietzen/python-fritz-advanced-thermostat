@@ -1,6 +1,6 @@
 import sys
 from setuptools import setup
-from os import path
+from os import path, environ
 
 setup_file_dir = path.abspath(path.dirname(__file__))
 
@@ -20,7 +20,7 @@ except FileNotFoundError:
 
 setup(
     name="fritz-advanced-thermostat",
-    version="0.2.3",
+    version=environ.get('VERSION'),
     description="A library for setting FRITZ!DECT thermostat values (e.g. offset, holidays, timer), that can't be set via AHA requests.",
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -40,4 +40,3 @@ setup(
     packages=["fritz_advanced_thermostat"],
     install_requires=requirements.split('\n')
 )
-
