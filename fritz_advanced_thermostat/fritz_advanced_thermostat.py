@@ -328,11 +328,24 @@ class FritzAdvancedThermostat(object):
 
             set_url = '/'.join([self._prefixed_host, 'data.lua'])
             set_data = self._generate_data_pkg(dev, dry_run=False)
-            response = requests.post(
-                set_url,
-                headers=self._generate_headers(set_data),
-                data=set_data,
-                verify=self._ssl_verify, timeout=120)
+            retries = 0
+            while retries <= 3:
+                try: 
+                    response = requests.post(
+                        set_url,
+                        headers=self._generate_headers(set_data),
+                        data=set_data,
+                        verify=self._ssl_verify, timeout=120)
+                    break
+                except ConnectionError as exc:
+                    self._logger.warning('Connection Error on setting thermostat: {}'.format(
+                        dev))
+                    retries += 1
+                    if retries > 3:
+                        err = 'Tried 3 times, got Connection Error on setting thermostat: {}'.format(
+                                dev)
+                        raise FritzAdvancedThermostatConnectionError(err) from exc
+
             if response.status_code == 200:
                 check = json.loads(response.text)
                 if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.29'):
