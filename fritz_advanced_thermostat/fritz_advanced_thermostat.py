@@ -67,14 +67,14 @@ class FritzAdvancedThermostat(object):
         self._thermostat_data = {}
         self._valid_device_types = ['Heizkörperregler']
         self._settable_keys = {
-            "common": [
+            "common": (
                 "Offset",
                 "WindowOpenTimer",
                 "WindowOpenTrigger",
                 "locklocal",
                 "lockuiapp",
-            ],
-            "ungrouped": [
+            ),
+            "ungrouped": (
                 "Absenktemp", "Heiztemp", "Holiday1Enabled", "Holiday1EndDay", "Holiday1EndHour", "Holiday1EndMonth",
                 "Holiday1StartDay", "Holiday1StartHour", "Holiday1StartMonth", "Holiday2Enabled", "Holiday2EndDay",
                 "Holiday2EndHour", "Holiday2EndMonth", "Holiday2StartDay", "Holiday2StartHour", "Holiday2StartMonth",
@@ -82,13 +82,14 @@ class FritzAdvancedThermostat(object):
                 "Holiday3StartHour", "Holiday3StartMonth", "Holiday4Enabled", "Holiday4EndDay", "Holiday4EndHour",
                 "Holiday4EndMonth", "Holiday4StartDay", "Holiday4StartHour", "Holiday4StartMonth", "Holidaytemp",
                 "SummerEnabled", "SummerEndDay", "SummerEndMonth", "SummerStartDay", "SummerStartMonth"
-            ]
+            )
         }
 
         self._supported_thermostats = ['FRITZ!DECT 301']
         self._thermostats = []
         # Setup selenium options
         self._selenium_options = Options()
+        # TODO Remove
         self._selenium_options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
         self._selenium_options.add_argument('--headless')
@@ -183,9 +184,9 @@ class FritzAdvancedThermostat(object):
 
     def _set_thermostat_values(self, device_name, **kwargs):
         self._load_raw_thermostat_data(device_name)
-        settable_keys = self._settable_keys["common"]
+        settable_keys = list(self._settable_keys["common"])
         if not self._thermostat_data[device_name]['Grouped']:
-            settable_keys += self._settable_keys["ungrouped"]
+            settable_keys += list(self._settable_keys["ungrouped"])
         for key, value in kwargs.items():
             if key in settable_keys:
                 if key in self._thermostat_data[device_name].keys():
