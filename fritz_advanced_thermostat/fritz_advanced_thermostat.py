@@ -89,9 +89,6 @@ class FritzAdvancedThermostat(object):
         self._thermostats = []
         # Setup selenium options
         self._selenium_options = Options()
-        # TODO Remove
-        self._selenium_options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-
         self._selenium_options.add_argument('--headless')
         self._selenium_options.add_argument('--no-sandbox')
         self._selenium_options.add_argument('--disable-gpu')
