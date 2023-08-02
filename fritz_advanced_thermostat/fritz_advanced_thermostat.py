@@ -91,7 +91,7 @@ class FritzAdvancedThermostat(object):
         self._thermostats = []
         # Setup selenium options
         self._selenium_options = Options()
-        self._selenium_options.add_argument('--headless')
+        self._selenium_options.add_argument('--headless=new')
         self._selenium_options.add_argument('--no-sandbox')
         self._selenium_options.add_argument('--disable-gpu')
         self._selenium_options.add_argument('--disable-dev-shm-usage')
