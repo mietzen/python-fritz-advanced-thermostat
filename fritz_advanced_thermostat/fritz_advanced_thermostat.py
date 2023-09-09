@@ -58,7 +58,7 @@ class FritzAdvancedThermostat(object):
         # Check Fritz!OS via FritzConnection
         fc = FritzConnection(address=host, user=user, password=password)
         self._fritzos = fc.system_version
-        self._supported_firmware = ['7.29', '7.56']
+        self._supported_firmware = ['7.29', '7.30', '7.31', '7.56', '7.57']
         # Set basic properties
         self._experimental = experimental
         self._user = user
