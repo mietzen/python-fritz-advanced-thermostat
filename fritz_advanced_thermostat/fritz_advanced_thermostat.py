@@ -58,7 +58,7 @@ class FritzAdvancedThermostat(object):
         # Check Fritz!OS via FritzConnection
         fc = FritzConnection(address=host, user=user, password=password)
         self._fritzos = fc.system_version
-        self._supported_firmware = ['7.29', '7.56']
+        self._supported_firmware = ['7.29', '7.30', '7.31', '7.56', '7.57']
         # Set basic properties
         self._experimental = experimental
         self._user = user
@@ -151,10 +151,10 @@ class FritzAdvancedThermostat(object):
                         valid_device_type = any(
                             [True for x in row_text if x in self._valid_device_types])
                         if valid_device_type or self._experimental:
-                            if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.29'):
+                            if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.31'):
                                 if len(row_text) == 5:
                                     grouped = True
-                            if version.parse('7.50') < version.parse(self._fritzos) <= version.parse('7.56'):
+                            if version.parse('7.50') < version.parse(self._fritzos) <= version.parse('7.99'):
                                 if len(row_text) == 4:
                                     grouped = True
                             row.find_element(By.TAG_NAME, "button").click()
