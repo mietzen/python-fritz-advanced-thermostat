@@ -151,7 +151,7 @@ class FritzAdvancedThermostat(object):
                         valid_device_type = any(
                             [True for x in row_text if x in self._valid_device_types])
                         if valid_device_type or self._experimental:
-                            if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.29'):
+                            if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.31'):
                                 if len(row_text) == 5:
                                     grouped = True
                             if version.parse('7.50') < version.parse(self._fritzos) <= version.parse('7.99'):
