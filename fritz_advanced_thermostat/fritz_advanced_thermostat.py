@@ -292,8 +292,8 @@ class FritzAdvancedThermostat(object):
         for dev in self._thermostat_data:
             self._check_device_name(dev)
 
-            # Dry run option is not available in 7.56 ???
-            if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.29'):
+            # Dry run option is not available in 7.57 ???
+            if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.31'):
                 dry_run_url = '/'.join(
                     [self._prefixed_host, 'net', 'home_auto_hkr_edit.lua'])
                 dry_run_data = self._generate_data_pkg(dev, dry_run=True)
@@ -349,14 +349,14 @@ class FritzAdvancedThermostat(object):
 
             if response.status_code == 200:
                 check = json.loads(response.text)
-                if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.29'):
+                if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.31'):
                     if check['pid'] != 'sh_dev':
                         err = 'Error: Something went wrong setting the thermostat values'
                         err = '\n' + response.text
                         self._logger.error(err)
                         raise FritzAdvancedThermostatExecutionError(
                             err)
-                if version.parse('7.50') < version.parse(self._fritzos) <= version.parse('7.56'):
+                if version.parse('7.50') < version.parse(self._fritzos) <= version.parse('7.57'):
                     if check['data']['apply'] != 'ok':
                         err = 'Error: Something went wrong setting the thermostat values'
                         err = '\n' + response.text
