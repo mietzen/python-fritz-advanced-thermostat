@@ -91,11 +91,11 @@ class FritzAdvancedThermostat(object):
         self._thermostats = []
         # Setup selenium options
         self._selenium_options = Options()
-        self._selenium_options.add_argument('--headless')
-        self._selenium_options.add_argument('--no-sandbox')
-        self._selenium_options.add_argument('--disable-gpu')
-        self._selenium_options.add_argument('--disable-dev-shm-usage')
-        self._selenium_options.add_argument("--window-size=1920,1200")
+        #self._selenium_options.add_argument('--headless')
+        #self._selenium_options.add_argument('--no-sandbox')
+        #self._selenium_options.add_argument('--disable-gpu')
+        #self._selenium_options.add_argument('--disable-dev-shm-usage')
+        #self._selenium_options.add_argument("--window-size=1920,1200")
         if not self._ssl_verify:
             self._selenium_options.add_argument('ignore-certificate-errors')
         self._check_fritzos()
@@ -154,7 +154,7 @@ class FritzAdvancedThermostat(object):
                             if version.parse('7.0') < version.parse(self._fritzos) <= version.parse('7.29'):
                                 if len(row_text) == 5:
                                     grouped = True
-                            if version.parse('7.50') < version.parse(self._fritzos) <= version.parse('7.56'):
+                            if version.parse('7.50') < version.parse(self._fritzos) <= version.parse('7.99'):
                                 if len(row_text) == 4:
                                     grouped = True
                             row.find_element(By.TAG_NAME, "button").click()
