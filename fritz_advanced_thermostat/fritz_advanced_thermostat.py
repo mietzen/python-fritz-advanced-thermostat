@@ -376,7 +376,7 @@ class FritzAdvancedThermostat(object):
 
     def set_thermostat_offset(self, device_name, offset):
         self._check_device_name(device_name)
-        if not (offset * 2).is_integer():
+        if not (float(offset) * 2).is_integer():
             offset = round(offset * 2) / 2
             self._logger.warning(
                 'Offset must be entered in 0.5 steps! Your offset was rounded to: {}'.format(str(offset)))
