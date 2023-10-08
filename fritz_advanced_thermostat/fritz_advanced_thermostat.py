@@ -172,8 +172,14 @@ class FritzAdvancedThermostat(object):
                 # Find thermostat data
                 thermostat_data = {}
                 for key in self._settable_keys["common"]:
-                    thermostat_data[key] = driver.execute_script(
-                        "return jsl.find(\"input[name={0}]\")[0]['value']".format(key))
+                    if key in ['locklocal', 'lockuiapp']:
+                        thermostat_data[key] = driver.execute_script(
+                            "return jsl.find(\"input[name={0}]\")[0]['checked']".format(key))
+                        if not thermostat_data[key]:
+                            thermostat_data.pop(key)
+                    else:
+                        thermostat_data[key] = driver.execute_script(
+                            "return jsl.find(\"input[name={0}]\")[0]['value']".format(key))
                 if not grouped:
                     for key in self._settable_keys["ungrouped"]:
                         thermostat_data[key] = driver.execute_script(
