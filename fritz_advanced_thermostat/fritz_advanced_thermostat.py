@@ -172,8 +172,14 @@ class FritzAdvancedThermostat(object):
                 # Find thermostat data
                 thermostat_data = {}
                 for key in self._settable_keys["common"]:
-                    thermostat_data[key] = driver.execute_script(
-                        "return jsl.find(\"input[name={0}]\")[0]['value']".format(key))
+                    if key in ['locklocal', 'lockuiapp']:
+                        thermostat_data[key] = driver.execute_script(
+                            "return jsl.find(\"input[name={0}]\")[0]['checked']".format(key))
+                        if not thermostat_data[key]:
+                            thermostat_data.pop(key)
+                    else:
+                        thermostat_data[key] = driver.execute_script(
+                            "return jsl.find(\"input[name={0}]\")[0]['value']".format(key))
                 if not grouped:
                     for key in self._settable_keys["ungrouped"]:
                         thermostat_data[key] = driver.execute_script(
@@ -370,7 +376,7 @@ class FritzAdvancedThermostat(object):
 
     def set_thermostat_offset(self, device_name, offset):
         self._check_device_name(device_name)
-        if not (offset * 2).is_integer():
+        if not (float(offset) * 2).is_integer():
             offset = round(offset * 2) / 2
             self._logger.warning(
                 'Offset must be entered in 0.5 steps! Your offset was rounded to: {}'.format(str(offset)))
