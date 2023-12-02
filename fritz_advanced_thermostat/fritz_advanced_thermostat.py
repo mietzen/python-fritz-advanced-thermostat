@@ -2,7 +2,6 @@ import json
 import re
 import requests
 from .errors import FritzAdvancedThermostatConnectionError, FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatKeyError
-from fritzconnection import FritzConnection
 from pyfritzhome import Fritzhome
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -55,9 +54,7 @@ class FritzAdvancedThermostat(object):
         self._sid = fh._sid
         self._devices = fh._devices
         self._prefixed_host = fh.get_prefixed_host()
-        # Check Fritz!OS via FritzConnection
-        fc = FritzConnection(address=host, user=user, password=password)
-        self._fritzos = fc.system_version
+        self._fritzos = self._load_fritzos()
         self._supported_firmware = ['7.29', '7.30', '7.31', '7.56', '7.57']
         # Set basic properties
         self._experimental = experimental
@@ -99,6 +96,18 @@ class FritzAdvancedThermostat(object):
         if not self._ssl_verify:
             self._selenium_options.add_argument('ignore-certificate-errors')
         self._check_fritzos()
+
+    def _load_fritzos(self):
+        data = {
+            "xhr": 1,
+            "sid": self._sid,
+            "page": "overview",
+        }
+
+        response = requests.post(self._prefixed_host + "/data.lua", data=data, allow_redirects=True, timeout=300)
+        response.raise_for_status()
+
+        return json.loads(response.text)["data"]["fritzos"]["nspver"]
 
     def _check_fritzos(self):
         if self._fritzos not in self._supported_firmware:
