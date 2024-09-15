@@ -396,7 +396,7 @@ class FritzAdvancedThermostat(object):
                         if dev.productname not in self._supported_thermostats:
                             self._logger.warning(dev.name + ' - ' +
                                                  dev.productname +
-                                                 ' is an untested devices!')
+                                                 ' is an untested device!')
                 else:
                     if dev.productname in self._supported_thermostats:
                         self._thermostats.append(dev.name)
