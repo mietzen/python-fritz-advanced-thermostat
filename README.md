@@ -52,9 +52,9 @@ You will also need to [setup a user](https://github.com/hthiery/python-fritzhome
 from fritz_advanced_thermostat import FritzAdvancedThermostat
 from fritz_advanced_thermostat import FritzAdvancedThermostatError
 
-host='192.168.178.1'
-user='my-user'
-password='my-password'
+host = '192.168.178.1'
+user = 'my-user'
+password = 'my-password'
 
 try:
     fat = FritzAdvancedThermostat(host, user, password, ssl_verify=False, experimental=False)
@@ -64,16 +64,18 @@ try:
     for dev in devices:
         print('Device name: ' + dev)
 
-    device_name = devices[0]
+    device_name = next(iter(devices))  # Get the first device name
     current_offset = fat.get_thermostat_offset(device_name)
-    print('Current offset of ' + device_name + ': ' + str(current_offset))
+    print(f'Current offset of {device_name}: {current_offset}')
+
     fat.set_thermostat_offset(device_name, current_offset + 1)
     fat.commit()
 
     new_offset = fat.get_thermostat_offset(device_name, force_reload=True)
-    print('New offset of ' + device_name + ': ' + str(new_offset))
+    print(f'New offset of {device_name}: {new_offset}')
+
 except FritzAdvancedThermostatError as err:
-    print('An error ouccured, check the logs!')
+    print('An error occurred, check the logs!')
     print(err)
 ```
 
