@@ -260,11 +260,76 @@ class FritzAdvancedThermostat:
                 raise FritzAdvancedThermostatKeyError(err)
 
     def _generate_thermostat_data(self, force_reload=False):
-        # TODO: implement
+        def __get_object(device: dict, unit_name: str, skill_type: str, skill_name: str = None):
+            object = None
+            for unit in device['units']:
+                if unit['type'] == unit_name:
+                    if skill_name:
+                        for skill in unit['skills']:
+                            if skill['type'] == skill_type:
+                                object = skill[skill_name]
+                    else:
+                        object = unit
+            return object
+
+        def __get_schedule(schedules: list, schedule_name):
+            schedule = [x for x in schedules if x['name'] == schedule_name]
+            return schedule[0] if schedule else None
+
+        def __get_temperature(presets, target):
+            temp = "7.5" # Represents Off / AUS
+            for preset in presets:
+                if preset['name'] == target:
+                    temp = str(preset['temperature'])
+            return temp
+
+        def __get_lock(locks, target):
+            locked = False
+            for lock in locks:
+                if lock["devControlName"] == target:
+                    if lock["isLocked"]:
+                        locked = True
+            return locked
+
         if not self._thermostat_data or force_reload:
             self._load_raw_device_data(force_reload)
+            for device in self._raw_device_data['devices']:
+                name = device['displayName']
+                if device["category"] == "THERMOSTAT":
+                    self._thermostat_data[name] = {}
+                    self._thermostat_data[name]["Offset"] = str(__get_object(device, 'TEMPERATURE_SENSOR',  'SmartHomeTemperatureSensor', 'offset'))
+                    self._thermostat_data[name]["WindowOpenTimer"] = str(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'temperatureDropDetection')['doNotHeatOffsetInMinutes'])
+                    self._thermostat_data[name]["WindowOpenTrigger"] = str(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'temperatureDropDetection')['sensitivity'])
 
-            self._thermostat_data = {}
+                    temperatures = __get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'presets')
+                    self._thermostat_data[name]["Absenktemp"] = __get_temperature(temperatures, "LOWER_TEMPERATURE")
+                    self._thermostat_data[name]["Heiztemp"] = __get_temperature(temperatures, "UPPER_TEMPERATURE")
+
+                    locks = __get_object(device, 'THERMOSTAT', 'SmartHomeThermostat')['interactionControls']
+                    self._thermostat_data[name]["locklocal"] = __get_lock(locks, "BUTTON")
+                    self._thermostat_data[name]["lockuiapp"] = __get_lock(locks, "EXTERNAL")
+
+                    summer_time = __get_schedule(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'timeControl')['timeSchedules'], 'SUMMER_TIME')
+                    if summer_time['isEnabled']:
+                        self._thermostat_data[name]["SummerEnabled"] = "1"
+                        self._thermostat_data[name]["SummerEndDay"] = str(int(summer_time['actions'][0]['timeSetting']['endDate'].split('-')[2]))
+                        self._thermostat_data[name]["SummerEndMonth"] = str(int(summer_time['actions'][0]['timeSetting']['endDate'].split('-')[1]))
+                        self._thermostat_data[name]["SummerStartDay"] = str(int(summer_time['actions'][0]['timeSetting']['startDate'].split('-')[2]))
+                        self._thermostat_data[name]["SummerStartMonth"] = str(int(summer_time['actions'][0]['timeSetting']['startDate'].split('-')[1]))
+                    else:
+                        self._thermostat_data[name]["SummerEnabled"] = "0"
+
+                    holidays = __get_schedule(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'timeControl')['timeSchedules'], 'HOLIDAYS')
+                    if holidays['isEnabled']:
+                        for i, holiday in enumerate(holidays['actions'], 1):
+                            self._thermostat_data[name][f"Holiday{i}Enabled"] = "1" if holiday["isEnabled"] else "0"
+                            self._thermostat_data[name][f"Holiday{i}EndDay"] = str(int(holiday['timeSetting']['endDate'].split('-')[2]))
+                            self._thermostat_data[name][f"Holiday{i}EndHour"] = str(int(holiday['timeSetting']['startTime'].split(':')[1]))
+                            self._thermostat_data[name][f"Holiday{i}EndMonth"] = str(int(holiday['timeSetting']['endDate'].split('-')[1]))
+                            self._thermostat_data[name][f"Holiday{i}StartDay"] = str(int(holiday['timeSetting']['startDate'].split('-')[2]))
+                            self._thermostat_data[name][f"Holiday{i}StartHour"] = str(int(holiday['timeSetting']['startTime'].split(':')[1]))
+                            self._thermostat_data[name][f"Holiday{i}StartMonth"] = str(int(holiday['timeSetting']['startDate'].split('-')[1]))
+                        self._thermostat_data[name]["Holidaytemp"] = "16"
 
     def _get_device_id_by_name(self, device_name):
         self._load_raw_device_data()
