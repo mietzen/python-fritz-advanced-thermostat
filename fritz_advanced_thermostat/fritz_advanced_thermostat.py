@@ -1,14 +1,14 @@
+import hashlib
 import json
 import logging
 import re
 import sys
+import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
 import requests
 import urllib3
-import hashlib
 from packaging import version
-import xml.etree.ElementTree as ET
 
 # Silence annoying urllib3 Unverified HTTPS warnings, even so if we have checked verify ssl false in requests
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -23,7 +23,7 @@ from .errors import (
 PYTHON_VERSION = ".".join([str(x) for x in sys.version_info[0:3]])
 
 
-def get_logger(name: str, level: str = 'warning'):
+def get_logger(name: str, level: str = "warning"):
     logger = logging.getLogger(name)
     logger.setLevel(level.upper())
     handler = logging.StreamHandler(sys.stdout)
@@ -48,7 +48,7 @@ class FritzAdvancedThermostat:
             retries=3):
         # Get logger
         self._logger = get_logger(
-            'FritzAdvancedThermostatLogger', level=log_level)
+            "FritzAdvancedThermostatLogger", level=log_level)
 
         if experimental:
             self._logger.warning("Experimental mode! All checks disabled!")
@@ -104,30 +104,30 @@ class FritzAdvancedThermostat:
             url, verify=self._ssl_verify, timeout=self._timeout)
 
         xml_root = ET.fromstring(response.content)
-        sid = xml_root.findtext('SID')
+        sid = xml_root.findtext("SID")
 
-        if sid == '0000000000000000':
-            challenge_parts = xml_root.findtext('Challenge').split('$')
+        if sid == "0000000000000000":
+            challenge_parts = xml_root.findtext("Challenge").split("$")
             iter1 = int(challenge_parts[1])
             salt1 = bytes.fromhex(challenge_parts[2])
             iter2 = int(challenge_parts[3])
             salt2 = bytes.fromhex(challenge_parts[4])
 
             hash1 = hashlib.pbkdf2_hmac(
-                'sha256', password.encode('utf-8'), salt1, iter1)
-            hash2 = hashlib.pbkdf2_hmac('sha256', hash1, salt2, iter2)
+                "sha256", password.encode("utf-8"), salt1, iter1)
+            hash2 = hashlib.pbkdf2_hmac("sha256", hash1, salt2, iter2)
 
             payload = {
-                'response': f"{salt2.hex()}${hash2.hex()}",
-                'user': user
+                "response": f"{salt2.hex()}${hash2.hex()}",
+                "user": user,
             }
             login_response = requests.post(
                 url, data=payload, verify=self._ssl_verify, timeout=self._timeout)
             login_root = ET.fromstring(login_response.content)
 
-            sid = login_root.findtext('SID')
+            sid = login_root.findtext("SID")
 
-            if sid == '0000000000000000':
+            if sid == "0000000000000000":
                 err = "Invalid user or password!"
                 self._logger.error(err)
                 raise FritzAdvancedThermostatConnectionError(err)
@@ -166,9 +166,8 @@ class FritzAdvancedThermostat:
                 if retries > self._retries:
                     err = "Tried 3 times, got Connection Error on loading raw thermostat data"
                     raise FritzAdvancedThermostatConnectionError(err) from e
-                else:
-                    self._logger.warning("Retry %s of %s", str(
-                        retries), str(self._retries))
+                self._logger.warning("Retry %s of %s", str(
+                    retries), str(self._retries))
         if response.status_code != 200:
             err = "Error: " + str(response.status_code)
             self._logger.error(err)
@@ -197,7 +196,7 @@ class FritzAdvancedThermostat:
             self._logger.error(err)
             raise FritzAdvancedThermostatExecutionError(err)
 
-        return req_data['data']['fritzos']['nspver']
+        return req_data["data"]["fritzos"]["nspver"]
 
     def _load_raw_device_data(self, force_reload=False):
         if not self._raw_device_data or force_reload:
@@ -222,8 +221,7 @@ class FritzAdvancedThermostat:
                 err = "Error: Something went wrong loading the raw thermostat data\n" + response
                 self._logger.error(err)
                 raise FritzAdvancedThermostatExecutionError(err)
-            else:
-                self._raw_device_data = req_data["data"]
+            self._raw_device_data = req_data["data"]
 
     def _check_fritzos(self):
         if self._fritzos not in self._supported_firmware:
@@ -244,8 +242,8 @@ class FritzAdvancedThermostat:
 
     def _check_if_grouped(self, device_name):
         self._load_raw_device_data()
-        grouped_thermostats = [i['displayName'] for i in [
-            i['members'] for i in self._raw_device_data['groups']][0]]
+        grouped_thermostats = [i["displayName"] for i in [
+            i["members"] for i in self._raw_device_data["groups"]][0]]
         return device_name in grouped_thermostats
 
     def _set_thermostat_values(self, device_name, **kwargs):
@@ -255,7 +253,7 @@ class FritzAdvancedThermostat:
         for key, value in kwargs.items():
             if key in settable_keys:
                 if self._thermostat_data[device_name][key] != value:
-                    self._changed_devices.add('device_name')
+                    self._changed_devices.add("device_name")
                     self._thermostat_data[device_name][key] = value
             else:
                 err = "Error: " + key + " is not in:\n" + \
@@ -266,25 +264,25 @@ class FritzAdvancedThermostat:
     def _generate_thermostat_data(self, force_reload=False):
         def __get_object(device: dict, unit_name: str, skill_type: str, skill_name: str = None):
             object = None
-            for unit in device['units']:
-                if unit['type'] == unit_name:
+            for unit in device["units"]:
+                if unit["type"] == unit_name:
                     if skill_name:
-                        for skill in unit['skills']:
-                            if skill['type'] == skill_type:
+                        for skill in unit["skills"]:
+                            if skill["type"] == skill_type:
                                 object = skill[skill_name]
                     else:
                         object = unit
             return object
 
         def __get_schedule(schedules: list, schedule_name):
-            schedule = [x for x in schedules if x['name'] == schedule_name]
+            schedule = [x for x in schedules if x["name"] == schedule_name]
             return schedule[0] if schedule else None
 
         def __get_temperature(presets, target):
             temp = "7.5" # Represents Off / AUS
             for preset in presets:
-                if preset['name'] == target:
-                    temp = str(preset['temperature'])
+                if preset["name"] == target:
+                    temp = str(preset["temperature"])
             return temp
 
         def __get_lock(locks, target):
@@ -309,55 +307,55 @@ class FritzAdvancedThermostat:
 
         if not self._thermostat_data or force_reload:
             self._load_raw_device_data(force_reload)
-            for device in self._raw_device_data['devices']:
-                name = device['displayName']
-                grouped = name in [i['displayName'] for i in [i['members'] for i in self._raw_device_data['groups']][0]]
+            for device in self._raw_device_data["devices"]:
+                name = device["displayName"]
+                grouped = name in [i["displayName"] for i in [i["members"] for i in self._raw_device_data["groups"]][0]]
                 if device["category"] == "THERMOSTAT":
                     self._thermostat_data[name] = {}
-                    self._thermostat_data[name]["Offset"] = str(__get_object(device, 'TEMPERATURE_SENSOR',  'SmartHomeTemperatureSensor', 'offset'))
-                    self._thermostat_data[name]["WindowOpenTimer"] = str(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'temperatureDropDetection')['doNotHeatOffsetInMinutes'])
+                    self._thermostat_data[name]["Offset"] = str(__get_object(device, "TEMPERATURE_SENSOR",  "SmartHomeTemperatureSensor", "offset"))
+                    self._thermostat_data[name]["WindowOpenTimer"] = str(__get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "temperatureDropDetection")["doNotHeatOffsetInMinutes"])
                     # WindowOpenTrigger musst always be + 3
                     # xhr - json    GUI
                     #  4     1   -> niedrig
                     #  8     5   -> mittel
                     #  12    9   -> hoch
-                    self._thermostat_data[name]["WindowOpenTrigger"] = str(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'temperatureDropDetection')['sensitivity'] + 3)
+                    self._thermostat_data[name]["WindowOpenTrigger"] = str(__get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "temperatureDropDetection")["sensitivity"] + 3)
 
-                    locks = __get_object(device, 'THERMOSTAT', 'SmartHomeThermostat')['interactionControls']
+                    locks = __get_object(device, "THERMOSTAT", "SmartHomeThermostat")["interactionControls"]
                     self._thermostat_data[name]["locklocal"] = __get_lock(locks, "BUTTON")
                     self._thermostat_data[name]["lockuiapp"] = __get_lock(locks, "EXTERNAL")
                     self._thermostat_data[name]["Grouped"] = grouped
 
                     if not grouped:
-                        temperatures = __get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'presets')
+                        temperatures = __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "presets")
                         self._thermostat_data[name]["Absenktemp"] = __get_temperature(temperatures, "LOWER_TEMPERATURE")
                         self._thermostat_data[name]["Heiztemp"] = __get_temperature(temperatures, "UPPER_TEMPERATURE")
 
-                        summer_time = __get_schedule(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'timeControl')['timeSchedules'], 'SUMMER_TIME')
-                        if summer_time['isEnabled']:
+                        summer_time = __get_schedule(__get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "timeControl")["timeSchedules"], "SUMMER_TIME")
+                        if summer_time["isEnabled"]:
                             self._thermostat_data[name]["SummerEnabled"] = "1"
-                            self._thermostat_data[name]["SummerEndDay"] = str(int(summer_time['actions'][0]['timeSetting']['endDate'].split('-')[2]))
-                            self._thermostat_data[name]["SummerEndMonth"] = str(int(summer_time['actions'][0]['timeSetting']['endDate'].split('-')[1]))
-                            self._thermostat_data[name]["SummerStartDay"] = str(int(summer_time['actions'][0]['timeSetting']['startDate'].split('-')[2]))
-                            self._thermostat_data[name]["SummerStartMonth"] = str(int(summer_time['actions'][0]['timeSetting']['startDate'].split('-')[1]))
+                            self._thermostat_data[name]["SummerEndDay"] = str(int(summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[2]))
+                            self._thermostat_data[name]["SummerEndMonth"] = str(int(summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[1]))
+                            self._thermostat_data[name]["SummerStartDay"] = str(int(summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[2]))
+                            self._thermostat_data[name]["SummerStartMonth"] = str(int(summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[1]))
                         else:
                             self._thermostat_data[name]["SummerEnabled"] = "0"
 
-                        holidays = __get_schedule(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'timeControl')['timeSchedules'], 'HOLIDAYS')
-                        if holidays['isEnabled']:
-                            for i, holiday in enumerate(holidays['actions'], 1):
+                        holidays = __get_schedule(__get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "timeControl")["timeSchedules"], "HOLIDAYS")
+                        if holidays["isEnabled"]:
+                            for i, holiday in enumerate(holidays["actions"], 1):
                                 self._thermostat_data[name][f"Holiday{i}Enabled"] = "1" if holiday["isEnabled"] else "0"
-                                self._thermostat_data[name][f"Holiday{i}EndDay"] = str(int(holiday['timeSetting']['endDate'].split('-')[2]))
-                                self._thermostat_data[name][f"Holiday{i}EndHour"] = str(int(holiday['timeSetting']['startTime'].split(':')[1]))
-                                self._thermostat_data[name][f"Holiday{i}EndMonth"] = str(int(holiday['timeSetting']['endDate'].split('-')[1]))
-                                self._thermostat_data[name][f"Holiday{i}StartDay"] = str(int(holiday['timeSetting']['startDate'].split('-')[2]))
-                                self._thermostat_data[name][f"Holiday{i}StartHour"] = str(int(holiday['timeSetting']['startTime'].split(':')[1]))
-                                self._thermostat_data[name][f"Holiday{i}StartMonth"] = str(int(holiday['timeSetting']['startDate'].split('-')[1]))
-                            self._thermostat_data[name]["Holidaytemp"] = __get_holiday_temp(device['id'])
+                                self._thermostat_data[name][f"Holiday{i}EndDay"] = str(int(holiday["timeSetting"]["endDate"].split("-")[2]))
+                                self._thermostat_data[name][f"Holiday{i}EndHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
+                                self._thermostat_data[name][f"Holiday{i}EndMonth"] = str(int(holiday["timeSetting"]["endDate"].split("-")[1]))
+                                self._thermostat_data[name][f"Holiday{i}StartDay"] = str(int(holiday["timeSetting"]["startDate"].split("-")[2]))
+                                self._thermostat_data[name][f"Holiday{i}StartHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
+                                self._thermostat_data[name][f"Holiday{i}StartMonth"] = str(int(holiday["timeSetting"]["startDate"].split("-")[1]))
+                            self._thermostat_data[name]["Holidaytemp"] = __get_holiday_temp(device["id"])
 
     def _get_device_id_by_name(self, device_name):
         self._load_raw_device_data()
-        return [device['id'] for device in self._raw_device_data['devices'] if device['displayName'] == device_name][0]
+        return [device["id"] for device in self._raw_device_data["devices"] if device["displayName"] == device_name][0]
 
     def _generate_data_pkg(self, device_name, dry_run=True):
         self._generate_thermostat_data()
@@ -380,7 +378,7 @@ class FritzAdvancedThermostat:
                 if value:
                     holiday_enabled_count += int(value)
                     data_dict[
-                        f"Holiday {str(holiday_id_count)} ID"] = holiday_id_count
+                        f"Holiday {holiday_id_count!s} ID"] = holiday_id_count
                     holiday_id_count += 1
         if holiday_enabled_count:
             data_dict["HolidayEnabledCount"] = str(holiday_enabled_count)
@@ -436,7 +434,7 @@ class FritzAdvancedThermostat:
                         err += "\n" + dry_run_check["alert"]
                         self._logger.error(err)
                         raise FritzAdvancedThermostatExecutionError(err)
-                except json.decoder.JSONDecodeError as exc:
+                except json.decoder.JSONDecodeError as e:
                     if dry_run_response:
                         err = "Error: Something went wrong on setting the thermostat values"
                         err += "\n" + dry_run_response.text
@@ -445,7 +443,7 @@ class FritzAdvancedThermostat:
                         err += "\n" + dry_run_response.text
                     self._logger.error(err)
                     raise FritzAdvancedThermostatExecutionError(
-                        err) from exc
+                        err) from e
 
             payload = self._generate_data_pkg(thermostat, dry_run=False)
             response = self._fritz_post_req(payload, "data.lua")
@@ -465,7 +463,7 @@ class FritzAdvancedThermostat:
                         self._logger.error(err)
                         raise FritzAdvancedThermostatExecutionError(
                             err)
-            except json.decoder.JSONDecodeError as exc:
+            except json.decoder.JSONDecodeError as e:
                 err = "Error: Didn't get a valid json response when loading data\n" + response
                 self._logger.error(err)
                 raise FritzAdvancedThermostatExecutionError(err) from e
@@ -485,15 +483,15 @@ class FritzAdvancedThermostat:
     def get_thermostats(self):
         if not self._thermostats:
             self._load_raw_device_data()
-            devices = {device['displayName']: {'model': device['model'],
-                                            'type': device['category']} for device in self._raw_device_data['devices']}
+            devices = {device["displayName"]: {"model": device["model"],
+                                            "type": device["category"]} for device in self._raw_device_data["devices"]}
             for dev_name, dev_data in devices:
                 if self._experimental:
-                    if dev_data['type'] == 'THERMOSTAT':
+                    if dev_data["type"] == "THERMOSTAT":
                         self._thermostats.add(dev_name)
-                        if dev_data['model'] not in self._supported_thermostats:
+                        if dev_data["model"] not in self._supported_thermostats:
                             self._logger.warning(
-                                "%s - %s is an untested device!", dev_name, dev_data['model'])
-                elif dev_data['model'] in self._supported_thermostats:
+                                "%s - %s is an untested device!", dev_name, dev_data["model"])
+                elif dev_data["model"] in self._supported_thermostats:
                     self._thermostats.add(dev_name)
         return self._thermostats
