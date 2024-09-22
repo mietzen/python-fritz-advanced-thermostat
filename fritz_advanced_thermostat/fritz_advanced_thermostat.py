@@ -296,6 +296,7 @@ class FritzAdvancedThermostat:
             return locked
 
         def __get_holiday_temp(device_id):
+            # I found no other way then to parse the HTML with a regex, I don't know where I can find this.
             payload = {
                 "sid": self._sid,
                 "xhr": "1",
@@ -303,7 +304,7 @@ class FritzAdvancedThermostat:
                 "page": "home_auto_hkr_edit"}
             response = self._fritz_post_req(payload, "data.lua")
             regex = r'(?<=<input type="hidden" name="Holidaytemp" value=")\d+\.?\d?(?=" id="uiNum:Holidaytemp">)'
-            holiday_temp = re.match(regex, response)
+            holiday_temp = re.findall(regex, response)[0]
             return holiday_temp
 
         if not self._thermostat_data or force_reload:
@@ -315,7 +316,12 @@ class FritzAdvancedThermostat:
                     self._thermostat_data[name] = {}
                     self._thermostat_data[name]["Offset"] = str(__get_object(device, 'TEMPERATURE_SENSOR',  'SmartHomeTemperatureSensor', 'offset'))
                     self._thermostat_data[name]["WindowOpenTimer"] = str(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'temperatureDropDetection')['doNotHeatOffsetInMinutes'])
-                    self._thermostat_data[name]["WindowOpenTrigger"] = str(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'temperatureDropDetection')['sensitivity'])
+                    # WindowOpenTrigger musst always be + 3
+                    # xhr - json    GUI
+                    #  4     1   -> niedrig
+                    #  8     5   -> mittel
+                    #  12    9   -> hoch
+                    self._thermostat_data[name]["WindowOpenTrigger"] = str(__get_object(device, 'THERMOSTAT',  'SmartHomeThermostat', 'temperatureDropDetection')['sensitivity'] + 3)
 
                     locks = __get_object(device, 'THERMOSTAT', 'SmartHomeThermostat')['interactionControls']
                     self._thermostat_data[name]["locklocal"] = __get_lock(locks, "BUTTON")
@@ -418,62 +424,33 @@ class FritzAdvancedThermostat:
             thermostat = self._thermostat_data[self._changed_devices.pop()]
             # Dry run option is not available in 7.57 ???
             if version.parse("7.0") < version.parse(self._fritzos) <= version.parse("7.31"):
-                dry_run_url = "/".join(
-                    [self._prefixed_host, "net", "home_auto_hkr_edit.lua"])
-                dry_run_data = self._generate_data_pkg(
+                site = "/".join(["net", "home_auto_hkr_edit.lua"])
+                payload = self._generate_data_pkg(
                     thermostat, dry_run=True)
-                dry_run_response = requests.post(
-                    dry_run_url,
-                    headers=self._generate_headers(dry_run_data),
-                    data=dry_run_data,
-                    verify=self._ssl_verify, timeout=self._timeout)
-                if dry_run_response.status_code == 200:
-                    try:
-                        dry_run_check = json.loads(dry_run_response.text)
-                        if not dry_run_check["ok"]:
-                            err = "Error in: " + \
-                                ",".join(dry_run_check["tomark"])
-                            err += "\n" + dry_run_check["alert"]
-                            self._logger.error(err)
-                            raise FritzAdvancedThermostatExecutionError(err)
-                    except json.decoder.JSONDecodeError as exc:
-                        if dry_run_response:
-                            err = "Error: Something went wrong on setting the thermostat values"
-                            err += "\n" + dry_run_response.text
-                        else:
-                            err = "Error: Something went wrong on dry run"
-                            err += "\n" + dry_run_response.text
-                        self._logger.error(err)
-                        raise FritzAdvancedThermostatExecutionError(
-                            err) from exc
-                else:
-                    err = "Error: " + str(dry_run_response.status_code)
-                    self._logger.error(err)
-                    raise FritzAdvancedThermostatConnectionError()
-
-            set_url = "/".join([self._prefixed_host, "data.lua"])
-            set_data = self._generate_data_pkg(thermostat, dry_run=False)
-            retries = 0
-            while retries <= self._retries:
+                response = self._fritz_post_req(payload, site)
                 try:
-                    response = requests.post(
-                        set_url,
-                        headers=self._generate_headers(set_data),
-                        data=set_data,
-                        verify=self._ssl_verify, timeout=self._timeout)
-                    break
-                except ConnectionError as exc:
-                    self._logger.warning(
-                        "Connection Error on setting thermostat: %s", thermostat)
-                    retries += 1
-                    if retries > self._retries:
-                        err = f"Tried 3 times, got Connection Error on setting thermostat: {
-                            thermostat}"
-                        raise FritzAdvancedThermostatConnectionError(
-                            err) from exc
+                    dry_run_check = json.loads(dry_run_response)
+                    if not dry_run_check["ok"]:
+                        err = "Error in: " + \
+                            ",".join(dry_run_check["tomark"])
+                        err += "\n" + dry_run_check["alert"]
+                        self._logger.error(err)
+                        raise FritzAdvancedThermostatExecutionError(err)
+                except json.decoder.JSONDecodeError as exc:
+                    if dry_run_response:
+                        err = "Error: Something went wrong on setting the thermostat values"
+                        err += "\n" + dry_run_response.text
+                    else:
+                        err = "Error: Something went wrong on dry run"
+                        err += "\n" + dry_run_response.text
+                    self._logger.error(err)
+                    raise FritzAdvancedThermostatExecutionError(
+                        err) from exc
 
-            if response.status_code == 200:
-                check = json.loads(response.text)
+            payload = self._generate_data_pkg(thermostat, dry_run=False)
+            response = self._fritz_post_req(payload, "data.lua")
+            try:
+                check = json.loads(response)
                 if version.parse("7.0") < version.parse(self._fritzos) <= version.parse("7.31"):
                     if check["pid"] != "sh_dev":
                         err = "Error: Something went wrong setting the thermostat values"
@@ -488,10 +465,10 @@ class FritzAdvancedThermostat:
                         self._logger.error(err)
                         raise FritzAdvancedThermostatExecutionError(
                             err)
-            else:
-                err = "Error: " + str(response.status_code)
+            except json.decoder.JSONDecodeError as exc:
+                err = "Error: Didn't get a valid json response when loading data\n" + response
                 self._logger.error(err)
-                raise FritzAdvancedThermostatConnectionError(err)
+                raise FritzAdvancedThermostatExecutionError(err) from e
 
     def set_thermostat_offset(self, device_name, offset):
         self._check_device_name(device_name)
