@@ -5,9 +5,13 @@ import sys
 from urllib.parse import quote
 
 import requests
+import urllib3
 import hashlib
 from packaging import version
 import xml.etree.ElementTree as ET
+
+# Silence annoying urllib3 Unverified HTTPS warnings, even so if we have checked verify ssl false in requests
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from .errors import (
     FritzAdvancedThermostatCompatibilityError,
