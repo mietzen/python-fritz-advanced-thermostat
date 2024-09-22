@@ -1,8 +1,10 @@
-venv
-.vscode
 __pycache__
-local_test.py
+.DS_Store
+.ruff_cache
+.venv
+.vscode
+*.egg-info
 build
 dist
-*.egg-info
-.DS_Store
+local_test.py
+venv
