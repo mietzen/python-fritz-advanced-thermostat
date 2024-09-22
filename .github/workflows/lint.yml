@@ -30,7 +30,7 @@ jobs:
         run: |
           # stop the build if there are Python syntax errors or undefined names
           PY_VER=$(echo py${PY_VER} | tr -d '.')
-          ruff --format=github --ignore=E501 --exclude=__init__.py --target-version=${PY_VER} .
+          ruff check --fix --select "ALL" --ignore='C901,PLR0912,PLR0913,PLR0915,S314,E501' --target-version=y${PY_VER} ./fritz_advanced_thermostat/fritz_advanced_thermostat.py
 
   Check-Test:
     if: ${{ always() }}
