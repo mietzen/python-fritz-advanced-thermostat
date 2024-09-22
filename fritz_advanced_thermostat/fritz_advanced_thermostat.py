@@ -45,7 +45,7 @@ class FritzAdvancedThermostat:
             experimental=False,
             log_level="warning",
             timeout=60,
-            retries=3):
+            retries=3) -> None:
         # Get logger
         self._logger = get_logger(
             "FritzAdvancedThermostatLogger", level=log_level)
@@ -66,8 +66,8 @@ class FritzAdvancedThermostat:
         self._timeout = timeout
         self._retries = retries
         # Set data structures
-        self._thermostat_data = dict()
-        self._raw_device_data = dict()
+        self._thermostat_data = {}
+        self._raw_device_data = {}
         self._changed_devices = set()
         self._thermostats = set()
         self._settable_keys = {
@@ -134,7 +134,7 @@ class FritzAdvancedThermostat:
         return sid
 
     def _generate_headers(self, data):
-        headers = {
+        return {
             "Accept": "*/*",
             "Content-Type": "application/x-www-form-urlencoded",
             "Origin": self._prefixed_host,
@@ -147,10 +147,9 @@ class FritzAdvancedThermostat:
             "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive",
         }
-        return headers
 
     def _fritz_post_req(self, payload: dict, site: str) -> dict:
-        url = "/".join([self._prefixed_host, site])
+        url = f"{self._prefixed_host}/{site}"
         retries = 0
         while retries <= self._retries:
             try:
@@ -188,7 +187,7 @@ class FritzAdvancedThermostat:
             req_data = json.loads(response)
         except json.decoder.JSONDecodeError as e:
             err = "Error: Didn't get a valid json response when loading data\n" + response
-            self._logger.error(err)
+            self._logger.exception(err)
             raise FritzAdvancedThermostatExecutionError(err) from e
 
         if "fritzos" not in req_data["data"]:
@@ -198,7 +197,7 @@ class FritzAdvancedThermostat:
 
         return req_data["data"]["fritzos"]["nspver"]
 
-    def _load_raw_device_data(self, force_reload=False):
+    def _load_raw_device_data(self, force_reload=False) -> None:
         if not self._raw_device_data or force_reload:
             payload = {
                 "sid": self._sid,
@@ -214,7 +213,7 @@ class FritzAdvancedThermostat:
                 req_data = json.loads(response)
             except json.decoder.JSONDecodeError as e:
                 err = "Error: Didn't get a valid json response when loading data\n" + response
-                self._logger.error(err)
+                self._logger.exception(err)
                 raise FritzAdvancedThermostatExecutionError(err) from e
 
             if "devices" not in req_data["data"]:
@@ -223,7 +222,7 @@ class FritzAdvancedThermostat:
                 raise FritzAdvancedThermostatExecutionError(err)
             self._raw_device_data = req_data["data"]
 
-    def _check_fritzos(self):
+    def _check_fritzos(self) -> None:
         if self._fritzos not in self._supported_firmware:
             if self._experimental:
                 self._logger.warning("You're using an untested firmware!")
@@ -232,7 +231,7 @@ class FritzAdvancedThermostat:
                 self._logger.error(err)
                 raise FritzAdvancedThermostatCompatibilityError(err)
 
-    def _check_device_name(self, device_name):
+    def _check_device_name(self, device_name) -> None:
         self._generate_thermostat_data()
         if device_name not in self.get_thermostats():
             err = "Error: " + device_name + " not found!\n" + \
@@ -242,11 +241,11 @@ class FritzAdvancedThermostat:
 
     def _check_if_grouped(self, device_name):
         self._load_raw_device_data()
-        grouped_thermostats = [i["displayName"] for i in [
-            i["members"] for i in self._raw_device_data["groups"]][0]]
+        grouped_thermostats = [i["displayName"] for i in next(
+            i["members"] for i in self._raw_device_data["groups"])]
         return device_name in grouped_thermostats
 
-    def _set_thermostat_values(self, device_name, **kwargs):
+    def _set_thermostat_values(self, device_name, **kwargs) -> None:
         settable_keys = list(self._settable_keys["common"])
         if not self._check_if_grouped(device_name):
             settable_keys += list(self._settable_keys["ungrouped"])
@@ -261,8 +260,8 @@ class FritzAdvancedThermostat:
                 self._logger.error(err)
                 raise FritzAdvancedThermostatKeyError(err)
 
-    def _generate_thermostat_data(self, force_reload=False):
-        def __get_object(device: dict, unit_name: str, skill_type: str, skill_name: str = None):
+    def _generate_thermostat_data(self, force_reload=False) -> None:
+        def __get_object(device: dict, unit_name: str, skill_type: str, skill_name: str | None = None):
             object = None
             for unit in device["units"]:
                 if unit["type"] == unit_name:
@@ -288,9 +287,8 @@ class FritzAdvancedThermostat:
         def __get_lock(locks, target):
             locked = False
             for lock in locks:
-                if lock["devControlName"] == target:
-                    if lock["isLocked"]:
-                        locked = True
+                if lock["devControlName"] == target and lock["isLocked"]:
+                    locked = True
             return locked
 
         def __get_holiday_temp(device_id):
@@ -302,14 +300,13 @@ class FritzAdvancedThermostat:
                 "page": "home_auto_hkr_edit"}
             response = self._fritz_post_req(payload, "data.lua")
             regex = r'(?<=<input type="hidden" name="Holidaytemp" value=")\d+\.?\d?(?=" id="uiNum:Holidaytemp">)'
-            holiday_temp = re.findall(regex, response)[0]
-            return holiday_temp
+            return re.findall(regex, response)[0]
 
         if not self._thermostat_data or force_reload:
             self._load_raw_device_data(force_reload)
             for device in self._raw_device_data["devices"]:
                 name = device["displayName"]
-                grouped = name in [i["displayName"] for i in [i["members"] for i in self._raw_device_data["groups"]][0]]
+                grouped = name in [i["displayName"] for i in next(i["members"] for i in self._raw_device_data["groups"])]
                 if device["category"] == "THERMOSTAT":
                     self._thermostat_data[name] = {}
                     self._thermostat_data[name]["Offset"] = str(__get_object(device, "TEMPERATURE_SENSOR",  "SmartHomeTemperatureSensor", "offset"))
@@ -355,7 +352,7 @@ class FritzAdvancedThermostat:
 
     def _get_device_id_by_name(self, device_name):
         self._load_raw_device_data()
-        return [device["id"] for device in self._raw_device_data["devices"] if device["displayName"] == device_name][0]
+        return next(device["id"] for device in self._raw_device_data["devices"] if device["displayName"] == device_name)
 
     def _generate_data_pkg(self, device_name, dry_run=True):
         self._generate_thermostat_data()
@@ -374,12 +371,11 @@ class FritzAdvancedThermostat:
         holiday_enabled_count = 0
         holiday_id_count = 1
         for key, value in self._thermostat_data[device_name].items():
-            if re.search(r"Holiday\dEnabled", key):
-                if value:
-                    holiday_enabled_count += int(value)
-                    data_dict[
-                        f"Holiday {holiday_id_count!s} ID"] = holiday_id_count
-                    holiday_id_count += 1
+            if re.search(r"Holiday\dEnabled", key) and value:
+                holiday_enabled_count += int(value)
+                data_dict[
+                    f"Holiday {holiday_id_count!s} ID"] = holiday_id_count
+                holiday_id_count += 1
         if holiday_enabled_count:
             data_dict["HolidayEnabledCount"] = str(holiday_enabled_count)
 
@@ -417,12 +413,12 @@ class FritzAdvancedThermostat:
                 data_pkg.append(key + "=" + quote(str(value), safe=""))
         return "&".join(data_pkg)
 
-    def commit(self):
+    def commit(self) -> None:
         while self._changed_devices:
             thermostat = self._thermostat_data[self._changed_devices.pop()]
             # Dry run option is not available in 7.57 ???
             if version.parse("7.0") < version.parse(self._fritzos) <= version.parse("7.31"):
-                site = "/".join(["net", "home_auto_hkr_edit.lua"])
+                site = "net/home_auto_hkr_edit.lua"
                 payload = self._generate_data_pkg(
                     thermostat, dry_run=True)
                 response = self._fritz_post_req(payload, site)
@@ -441,7 +437,7 @@ class FritzAdvancedThermostat:
                     else:
                         err = "Error: Something went wrong on dry run"
                         err += "\n" + dry_run_response.text
-                    self._logger.error(err)
+                    self._logger.exception(err)
                     raise FritzAdvancedThermostatExecutionError(
                         err) from e
 
@@ -449,26 +445,24 @@ class FritzAdvancedThermostat:
             response = self._fritz_post_req(payload, "data.lua")
             try:
                 check = json.loads(response)
-                if version.parse("7.0") < version.parse(self._fritzos) <= version.parse("7.31"):
-                    if check["pid"] != "sh_dev":
-                        err = "Error: Something went wrong setting the thermostat values"
-                        err = "\n" + response.text
-                        self._logger.error(err)
-                        raise FritzAdvancedThermostatExecutionError(
-                            err)
-                if version.parse("7.50") < version.parse(self._fritzos) <= version.parse("7.57"):
-                    if check["data"]["apply"] != "ok":
-                        err = "Error: Something went wrong setting the thermostat values"
-                        err = "\n" + response.text
-                        self._logger.error(err)
-                        raise FritzAdvancedThermostatExecutionError(
-                            err)
+                if version.parse("7.0") < version.parse(self._fritzos) <= version.parse("7.31") and check["pid"] != "sh_dev":
+                    err = "Error: Something went wrong setting the thermostat values"
+                    err = "\n" + response.text
+                    self._logger.error(err)
+                    raise FritzAdvancedThermostatExecutionError(
+                        err)
+                if version.parse("7.50") < version.parse(self._fritzos) <= version.parse("7.57") and check["data"]["apply"] != "ok":
+                    err = "Error: Something went wrong setting the thermostat values"
+                    err = "\n" + response.text
+                    self._logger.error(err)
+                    raise FritzAdvancedThermostatExecutionError(
+                        err)
             except json.decoder.JSONDecodeError as e:
                 err = "Error: Didn't get a valid json response when loading data\n" + response
-                self._logger.error(err)
+                self._logger.exception(err)
                 raise FritzAdvancedThermostatExecutionError(err) from e
 
-    def set_thermostat_offset(self, device_name, offset):
+    def set_thermostat_offset(self, device_name, offset) -> None:
         self._check_device_name(device_name)
         if not (float(offset) * 2).is_integer():
             offset = round(offset * 2) / 2
