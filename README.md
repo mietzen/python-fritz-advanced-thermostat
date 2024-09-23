@@ -73,7 +73,8 @@ except FritzAdvancedThermostatError as err:
 
 ## Credits
 
-Thanks to [Argelbargel](https://github.com/Argelbargel) from the openHab community for [showing me a way](https://community.openhab.org/t/groovy-script-rule-to-update-temperature-offsets-of-avm-fritz-dect-301-302-based-on-external-temperature-sensors/139917) to obtain the thermostat data without selenium.
+Thanks to:
+- [Argelbargel](https://github.com/Argelbargel) from the openHab community for [showing me a way](https://community.openhab.org/t/groovy-script-rule-to-update-temperature-offsets-of-avm-fritz-dect-301-302-based-on-external-temperature-sensors/139917) to obtain the thermostat data without selenium.
 
 ## Disclaimer
 
