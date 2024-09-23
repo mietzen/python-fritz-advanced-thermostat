@@ -1,17 +1,9 @@
-# Disclaimer
-
-**This package is not related to or developed by AVM. No relationship between the developer of this package and AVM exists.**
-
-**All trademarks, logos and brand names are the property of their respective owners. All company, product and service names used in this package are for identification purposes only. Use of these names,trademarks and brands does not imply endorsement.**
-
-
 # Advanced Fritz Thermostat
 
 A library for setting the values [AHA requests](https://avm.de/fileadmin/user_upload/Global/Service/Schnittstellen/AHA-HTTP-Interface.pdf) won't let you!
 
 For basic settings use [Heikos (hthiery)](https://github.com/hthiery) amazing [pyfritzhome](https://github.com/hthiery/python-fritzhome)!
 
-## Disclaimer
 
 This library will always be hacky and will never leave the "beta state", since it uses undocumented API's and selenium for data scraping.
 I use this library myself and I give my best to keep it updated.
@@ -82,3 +74,9 @@ except FritzAdvancedThermostatError as err:
 ## Credits
 
 Thanks to [Argelbargel](https://github.com/Argelbargel) from the openHab community for [showing me a way](https://community.openhab.org/t/groovy-script-rule-to-update-temperature-offsets-of-avm-fritz-dect-301-302-based-on-external-temperature-sensors/139917) to obtain the thermostat data without selenium.
+
+## Disclaimer
+
+**This package is not related to or developed by AVM. No relationship between the developer of this package and AVM exists.**
+
+**All trademarks, logos and brand names are the property of their respective owners. All company, product and service names used in this package are for identification purposes only. Use of these names,trademarks and brands does not imply endorsement.**
