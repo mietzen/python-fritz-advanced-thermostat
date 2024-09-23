@@ -146,9 +146,8 @@ class FritzAdvancedThermostat:
             log_level: str = "warning",
             timeout: int = 60,
             retries: int = 3,
-            *,
-            ssl_verify: bool,
-            experimental: bool) -> None:
+            ssl_verify: bool = False,
+            experimental: bool = False) -> None:
         """Initialize the FritzAdvancedThermostat class.
 
         This method sets up the connection to the Fritz!Box and initializes
@@ -291,7 +290,7 @@ class FritzAdvancedThermostat:
                     raise FritzAdvancedThermostatConnectionError(err) from e
                 self._logger.warning("Retry %s of %s", str(
                     retries), str(self._retries))
-        if response.status_code == requests.codes.ok:
+        if response.status_code != requests.codes.ok:
             err = "Error: " + str(response.status_code)
             self._logger.error(err)
             raise FritzAdvancedThermostatConnectionError(err)
@@ -321,7 +320,7 @@ class FritzAdvancedThermostat:
 
         return req_data["data"]["fritzos"]["nspver"]
 
-    def _load_raw_device_data(self, *, force_reload: bool) -> None:
+    def _load_raw_device_data(self, force_reload: bool = False) -> None:
         if not self._raw_device_data or force_reload:
             payload = {
                 "sid": self._sid,
@@ -365,8 +364,8 @@ class FritzAdvancedThermostat:
 
     def _check_if_grouped(self, device_name: str) -> bool:
         self._load_raw_device_data()
-        grouped_thermostats = [i["displayName"] for i in next(
-            i["members"] for i in self._raw_device_data["groups"])]
+        grouped_thermostats = [i["displayName"] for i in [
+            i["members"] for i in self._raw_device_data["groups"]][0]]
         return device_name in grouped_thermostats
 
     def _set_thermostat_values(self, device_name: str, **kwargs: any) -> None:
@@ -384,7 +383,7 @@ class FritzAdvancedThermostat:
                 self._logger.error(err)
                 raise FritzAdvancedThermostatKeyError(err)
 
-    def _generate_thermostat_data(self, *, force_reload: bool) -> None:
+    def _generate_thermostat_data(self, force_reload: bool = False) -> None:
         def __get_object(device: dict, unit_name: str, skill_type: str, skill_name: str | None = None) -> any:
             thermostat_obj = None
             for unit in device["units"]:
@@ -424,13 +423,13 @@ class FritzAdvancedThermostat:
                 "page": "home_auto_hkr_edit"}
             response = self._fritz_post_req(payload, "data.lua")
             regex = r'(?<=<input type="hidden" name="Holidaytemp" value=")\d+\.?\d?(?=" id="uiNum:Holidaytemp">)'
-            return next(re.findall(regex, response))
+            return re.findall(regex, response)[0]
 
         if not self._thermostat_data or force_reload:
             self._load_raw_device_data(force_reload)
             for device in self._raw_device_data["devices"]:
                 name = device["displayName"]
-                grouped = name in [i["displayName"] for i in next(i["members"] for i in self._raw_device_data["groups"])]
+                grouped = name in [i["displayName"] for i in [i["members"] for i in self._raw_device_data["groups"]][0]]
                 if device["category"] == "THERMOSTAT":
                     self._thermostat_data[name] = {}
                     self._thermostat_data[name]["Offset"] = str(
@@ -479,9 +478,9 @@ class FritzAdvancedThermostat:
 
     def _get_device_id_by_name(self, device_name: str) -> int:
         self._load_raw_device_data()
-        return next(device["id"] for device in self._raw_device_data["devices"] if device["displayName"] == device_name)
+        return [device["id"] for device in self._raw_device_data["devices"] if device["displayName"] == device_name][0]
 
-    def _generate_data_pkg(self, device_name: str, *, dry_run: bool) -> str:
+    def _generate_data_pkg(self, device_name: str, dry_run: bool = False) -> str:
         self._generate_thermostat_data()
         data_dict = {
             "sid": self._sid,
@@ -501,7 +500,7 @@ class FritzAdvancedThermostat:
             if re.search(r"Holiday\dEnabled", key) and value:
                 holiday_enabled_count += int(value)
                 data_dict[
-                    f"Holiday {holiday_id_count!s} ID"] = holiday_id_count
+                    f"Holiday{holiday_id_count!s}ID"] = holiday_id_count
                 holiday_id_count += 1
         if holiday_enabled_count:
             data_dict["HolidayEnabledCount"] = str(holiday_enabled_count)
@@ -624,7 +623,7 @@ class FritzAdvancedThermostat:
                 "Offset must be entered in 0.5 steps! Your offset was rounded to: %s", "{offset!s}")
         self._set_thermostat_values(device_name, Offset=str(offset))
 
-    def get_thermostat_offset(self, device_name: str, *, force_reload: bool) -> float:
+    def get_thermostat_offset(self, device_name: str, force_reload: bool = False) -> float:
         """Retrieve the thermostat temperature offset for a given device.
 
         This method returns the temperature offset for the specified thermostat device. It ensures that
@@ -662,7 +661,7 @@ class FritzAdvancedThermostat:
             self._load_raw_device_data()
             devices = {device["displayName"]: {"model": device["model"],
                                             "type": device["category"]} for device in self._raw_device_data["devices"]}
-            for dev_name, dev_data in devices:
+            for dev_name, dev_data in devices.items():
                 if self._experimental:
                     if dev_data["type"] == "THERMOSTAT":
                         self._thermostats.add(dev_name)
