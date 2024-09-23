@@ -50,12 +50,25 @@ import requests
 import urllib3
 from packaging import version
 
-from .errors import (
-    FritzAdvancedThermostatCompatibilityError,
-    FritzAdvancedThermostatConnectionError,
-    FritzAdvancedThermostatExecutionError,
-    FritzAdvancedThermostatKeyError,
-)
+
+class FritzAdvancedThermostatExecutionError(Exception):
+    """Unknown error while executing"""
+
+
+class FritzAdvancedThermostatCompatibilityError(Exception):
+    """Fritz!BOX is not compatible with this module"""
+
+
+class FritzAdvancedThermostatKeyError(KeyError):
+    """Error while obtaining a key from the Fritz!BOX"""
+
+
+class FritzAdvancedThermostatConnectionError(ConnectionError):
+    """Error while connecting to the Fritz!BOX"""
+
+
+FritzAdvancedThermostatError = (FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatKeyError, FritzAdvancedThermostatConnectionError)
+
 
 # Silence annoying urllib3 Unverified HTTPS warnings, even so if we have checked verify ssl false in requests
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

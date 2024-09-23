@@ -6,5 +6,6 @@ __pycache__
 *.egg-info
 build
 dist
-local_test.py
 venv
+.pytest_cache
+testing.ipynb
