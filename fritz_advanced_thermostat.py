@@ -470,15 +470,21 @@ class FritzAdvancedThermostat:
 
                         holidays = __get_schedule(__get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "timeControl")["timeSchedules"], "HOLIDAYS")
                         if holidays["isEnabled"]:
+                            holiday_id_count = 0
                             for i, holiday in enumerate(holidays["actions"], 1):
-                                self._thermostat_data[name][f"Holiday{i}Enabled"] = "1" if holiday["isEnabled"] else "0"
-                                self._thermostat_data[name][f"Holiday{i}EndDay"] = str(int(holiday["timeSetting"]["endDate"].split("-")[2]))
-                                self._thermostat_data[name][f"Holiday{i}EndHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
-                                self._thermostat_data[name][f"Holiday{i}EndMonth"] = str(int(holiday["timeSetting"]["endDate"].split("-")[1]))
-                                self._thermostat_data[name][f"Holiday{i}StartDay"] = str(int(holiday["timeSetting"]["startDate"].split("-")[2]))
-                                self._thermostat_data[name][f"Holiday{i}StartHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
-                                self._thermostat_data[name][f"Holiday{i}StartMonth"] = str(int(holiday["timeSetting"]["startDate"].split("-")[1]))
+                                if holiday["isEnabled"]:
+                                    holiday_id_count += 1
+                                    self._thermostat_data[name][f"Holiday{i}Enabled"] = "1"
+                                    self._thermostat_data[name][f"Holiday{holiday_id_count!s}ID"] = holiday_id_count
+                                    self._thermostat_data[name][f"Holiday{i}EndDay"] = str(int(holiday["timeSetting"]["endDate"].split("-")[2]))
+                                    self._thermostat_data[name][f"Holiday{i}EndHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
+                                    self._thermostat_data[name][f"Holiday{i}EndMonth"] = str(int(holiday["timeSetting"]["endDate"].split("-")[1]))
+                                    self._thermostat_data[name][f"Holiday{i}StartDay"] = str(int(holiday["timeSetting"]["startDate"].split("-")[2]))
+                                    self._thermostat_data[name][f"Holiday{i}StartHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
+                                    self._thermostat_data[name][f"Holiday{i}StartMonth"] = str(int(holiday["timeSetting"]["startDate"].split("-")[1]))
+                            self._thermostat_data[name]["HolidayEnabledCount"] = str(holiday_id_count - 1)
                             self._thermostat_data[name]["Holidaytemp"] = __get_holiday_temp(device["id"])
+
 
     def _get_device_id_by_name(self, device_name: str) -> int:
         self._load_raw_device_data()
@@ -492,22 +498,14 @@ class FritzAdvancedThermostat:
             "view": None,
             "back_to_page": "sh_dev",
             "ule_device_name": device_name,
-            "graphState": "1",
             "tempsensor": "own",
             "ExtTempsensorID": "tochoose",
         }
+
         data_dict = data_dict | self._thermostat_data[device_name]
 
-        holiday_enabled_count = 0
-        holiday_id_count = 1
-        for key, value in self._thermostat_data[device_name].items():
-            if re.search(r"Holiday\dEnabled", key) and value:
-                holiday_enabled_count += int(value)
-                data_dict[
-                    f"Holiday{holiday_id_count!s}ID"] = holiday_id_count
-                holiday_id_count += 1
-        if holiday_enabled_count:
-            data_dict["HolidayEnabledCount"] = str(holiday_enabled_count)
+        if not data_dict.pop("Grouped"):
+            data_dict['graphState'] = "1"
 
         if dry_run:
             data_dict = data_dict | {
@@ -522,15 +520,6 @@ class FritzAdvancedThermostat:
                 "apply": None,
                 "oldpage": "/net/home_auto_hkr_edit.lua",
             }
-        # Remove timer if grouped, also remove group marker in either case
-        if data_dict["Grouped"]:
-            for timer in re.findall(r"timer_item_\d",
-                                    "|".join(data_dict.keys())):
-                data_dict.pop(timer)
-            data_dict.pop("graphState")
-            data_dict.pop("Grouped")
-        else:
-            data_dict.pop("Grouped")
 
         data_pkg = []
         for key, value in data_dict.items():
