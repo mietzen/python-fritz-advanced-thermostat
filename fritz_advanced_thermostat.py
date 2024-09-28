@@ -425,6 +425,72 @@ class FritzAdvancedThermostat:
             regex = r'(?<=<input type="hidden" name="Holidaytemp" value=")\d+\.?\d?(?=" id="uiNum:Holidaytemp">)'
             return re.findall(regex, response)[0]
 
+        def __generate_weekly_timers(schedule: dict) -> dict:
+            """
+            Week Binary Conversion (reversed)
+            Mo Tu We Th Fr Sa Su
+            1  1  1  1  1  1  1  = 127
+            1  0  0  0  0  1  0  = 33
+            0  0  1  1  0  1  0  = 44
+
+            timer_item_x=${TIME};${STATE};${DAYS}
+            timer_item_0=  0530 ;    1   ; 127
+            This means turn the device on at 5:30 on all days of the week
+            """
+
+            weekly_schedule = {}
+            # day - bitmask mapping
+            day_to_bit = {
+                'MON': 1 << 0,   # Monday -> 1
+                'TUE': 1 << 1,   # Tuesday -> 2
+                'WED': 1 << 2,   # Wednesday -> 4
+                'THU': 1 << 3,   # Thursday -> 8
+                'FRI': 1 << 4,   # Friday -> 16
+                'SAT': 1 << 5,   # Saturday -> 32
+                'SUN': 1 << 6    # Sunday -> 64
+            }
+
+            # action states mapping
+            set_action = {
+                'UPPER_TEMPERATURE': 1,
+                'LOWER_TEMPERATURE': 0,
+                'SET_OFF': 0
+            }
+            combined_times = {}
+            for action in schedule['actions']:
+                day = action['timeSetting']['dayOfWeek']
+                start_time = action['timeSetting']['startTime']
+
+                if 'presetTemperature' in action['description']:
+                    state = action['description']['presetTemperature']['name']
+                elif action['description']['action'] == 'SET_OFF':
+                    state = 'SET_OFF'
+
+                # Get bitmask and category for the action
+                if day in day_to_bit:
+                    bitmask = day_to_bit[day]
+                    category = set_action[state]
+                    time_str = start_time.replace(':', '')[:4]  # Format time to HHMM
+                    key = (time_str, category)
+
+                    # Initialize bitmask if not present
+                    if key not in combined_times:
+                        combined_times[key] = 0
+
+                    # Update the bitmask for the day
+                    combined_times[key] |= bitmask
+            def first_day_in_bitmask(bitmask):
+                for i in range(7):
+                    if bitmask & (1 << i):
+                        return i
+                return -1
+            sorted_times = sorted(combined_times[device_name].items(), key=lambda x: (first_day_in_bitmask(x[1]), x[0][0]))
+
+            for i, ((time_str, category), bitmask) in enumerate(sorted_times):
+                weekly_schedule[f"timer_item_{i}"] = "{time_str};{category};{bitmask}"
+
+            return weekly_schedule
+
         if not self._thermostat_data or force_reload:
             self._load_raw_device_data(force_reload)
             for device in self._raw_device_data["devices"]:
@@ -447,13 +513,13 @@ class FritzAdvancedThermostat:
                     locks = __get_object(device, "THERMOSTAT", "SmartHomeThermostat")["interactionControls"]
                     self._thermostat_data[name]["locklocal"] = __get_lock(locks, "BUTTON")
                     self._thermostat_data[name]["lockuiapp"] = __get_lock(locks, "EXTERNAL")
-                    self._thermostat_data[name]["Grouped"] = grouped
 
                     adaptiv_heating = __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "adaptivHeating")
                     if adaptiv_heating['isEnabled'] and adaptiv_heating['supported']:
                         self._thermostat_data[name]["hkr_adaptheat"] = 1
 
                     if not grouped:
+                        self._thermostat_data[name]['graphState'] = "1"
                         temperatures = __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "presets")
                         self._thermostat_data[name]["Absenktemp"] = __get_temperature(temperatures, "LOWER_TEMPERATURE")
                         self._thermostat_data[name]["Heiztemp"] = __get_temperature(temperatures, "UPPER_TEMPERATURE")
@@ -485,6 +551,8 @@ class FritzAdvancedThermostat:
                             self._thermostat_data[name]["HolidayEnabledCount"] = str(holiday_id_count - 1)
                             self._thermostat_data[name]["Holidaytemp"] = __get_holiday_temp(device["id"])
 
+                        raw_weekly_timetable = __get_schedule(__get_object(device, "THERMOSTAT", "SmartHomeThermostat", "timeControl")["timeSchedules"], "TEMPERATURE")
+                        self._thermostat_data[name] = self._thermostat_data[name] | __generate_weekly_timers(raw_weekly_timetable)
 
     def _get_device_id_by_name(self, device_name: str) -> int:
         self._load_raw_device_data()
@@ -503,9 +571,6 @@ class FritzAdvancedThermostat:
         }
 
         data_dict = data_dict | self._thermostat_data[device_name]
-
-        if not data_dict.pop("Grouped"):
-            data_dict['graphState'] = "1"
 
         if dry_run:
             data_dict = data_dict | {
