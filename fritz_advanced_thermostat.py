@@ -375,7 +375,7 @@ class FritzAdvancedThermostat:
         for key, value in kwargs.items():
             if key in settable_keys:
                 if self._thermostat_data[device_name][key] != value:
-                    self._changed_devices.add("device_name")
+                    self._changed_devices.add(device_name)
                     self._thermostat_data[device_name][key] = value
             else:
                 err = "Error: " + key + " is not in:\n" + \
@@ -553,12 +553,12 @@ class FritzAdvancedThermostat:
 
         """
         while self._changed_devices:
-            thermostat = self._thermostat_data[self._changed_devices.pop()]
+            thermostat_name = self._changed_devices.pop()
             # Dry run option is not available in 7.57 ???
             if version.parse("7.0") < version.parse(self._fritzos) <= version.parse("7.31"):
                 site = "net/home_auto_hkr_edit.lua"
                 payload = self._generate_data_pkg(
-                    thermostat, dry_run=True)
+                    thermostat_name, dry_run=True)
                 dry_run_response = self._fritz_post_req(payload, site)
                 try:
                     dry_run_check = json.loads(dry_run_response)
@@ -579,7 +579,7 @@ class FritzAdvancedThermostat:
                     raise FritzAdvancedThermostatExecutionError(
                         err) from e
 
-            payload = self._generate_data_pkg(thermostat, dry_run=False)
+            payload = self._generate_data_pkg(thermostat_name, dry_run=False)
             response = self._fritz_post_req(payload, "data.lua")
             try:
                 check = json.loads(response)
