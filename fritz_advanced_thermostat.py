@@ -449,6 +449,10 @@ class FritzAdvancedThermostat:
                     self._thermostat_data[name]["lockuiapp"] = __get_lock(locks, "EXTERNAL")
                     self._thermostat_data[name]["Grouped"] = grouped
 
+                    adaptiv_heating = __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "adaptivHeating")
+                    if adaptiv_heating['isEnabled'] and adaptiv_heating['supported']:
+                        self._thermostat_data[name]["hkr_adaptheat"] = 1
+
                     if not grouped:
                         temperatures = __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "presets")
                         self._thermostat_data[name]["Absenktemp"] = __get_temperature(temperatures, "LOWER_TEMPERATURE")
