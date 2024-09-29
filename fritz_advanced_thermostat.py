@@ -425,7 +425,13 @@ class FritzAdvancedThermostat:
             regex = r'(?<=<input type="hidden" name="Holidaytemp" value=")\d+\.?\d?(?=" id="uiNum:Holidaytemp">)'
             return re.findall(regex, response)[0]
 
-        def __generate_weekly_timers(schedule: dict) -> dict:
+        def __first_day_in_bitmask(bitmask: int) -> int:
+            for i in range(7):
+                if bitmask & (1 << i):
+                    return i
+            return -1
+
+        def __generate_weekly_timers(raw_timers: dict) -> dict:
             """
             Week Binary Conversion (reversed)
             Mo Tu We Th Fr Sa Su
@@ -438,7 +444,7 @@ class FritzAdvancedThermostat:
             This means turn the device on at 5:30 on all days of the week
             """
 
-            weekly_schedule = {}
+            weekly_timers = {}
             # day - bitmask mapping
             day_to_bit = {
                 'MON': 1 << 0,   # Monday -> 1
@@ -457,7 +463,7 @@ class FritzAdvancedThermostat:
                 'SET_OFF': 0
             }
             combined_times = {}
-            for action in schedule['actions']:
+            for action in raw_timers['actions']:
                 day = action['timeSetting']['dayOfWeek']
                 start_time = action['timeSetting']['startTime']
 
@@ -479,17 +485,45 @@ class FritzAdvancedThermostat:
 
                     # Update the bitmask for the day
                     combined_times[key] |= bitmask
-            def first_day_in_bitmask(bitmask):
-                for i in range(7):
-                    if bitmask & (1 << i):
-                        return i
-                return -1
-            sorted_times = sorted(combined_times[device_name].items(), key=lambda x: (first_day_in_bitmask(x[1]), x[0][0]))
+
+            sorted_times = sorted(combined_times.items(), key=lambda x: (__first_day_in_bitmask(x[1]), x[0][0]))
 
             for i, ((time_str, category), bitmask) in enumerate(sorted_times):
-                weekly_schedule[f"timer_item_{i}"] = "{time_str};{category};{bitmask}"
+                weekly_timers[f"timer_item_{i}"] = "{time_str};{category};{bitmask}"
 
-            return weekly_schedule
+            return weekly_timers
+
+        def __generate_holiday_schedule(raw_holidays: dict) -> dict:
+            holiday_schedule = {}
+            if holidays["isEnabled"]:
+                holiday_id_count = 0
+                for i, holiday in enumerate(raw_holidays["actions"], 1):
+                    if holiday["isEnabled"]:
+                        holiday_id_count += 1
+                        holiday_schedule[f"Holiday{i}Enabled"] = "1"
+                        holiday_schedule[f"Holiday{holiday_id_count!s}ID"] = holiday_id_count
+                        holiday_schedule[f"Holiday{i}EndDay"] = str(int(holiday["timeSetting"]["endDate"].split("-")[2]))
+                        holiday_schedule[f"Holiday{i}EndHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
+                        holiday_schedule[f"Holiday{i}EndMonth"] = str(int(holiday["timeSetting"]["endDate"].split("-")[1]))
+                        holiday_schedule[f"Holiday{i}StartDay"] = str(int(holiday["timeSetting"]["startDate"].split("-")[2]))
+                        holiday_schedule[f"Holiday{i}StartHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
+                        holiday_schedule[f"Holiday{i}StartMonth"] = str(int(holiday["timeSetting"]["startDate"].split("-")[1]))
+                holiday_schedule["HolidayEnabledCount"] = str(holiday_id_count - 1)
+                holiday_schedule["Holidaytemp"] = __get_holiday_temp(device["id"])
+
+            return holiday_schedule
+
+        def __generate_summer_time_schedule(raw_summer_time: dict) -> dict:
+            summer_time_schedule = {}
+            if raw_summer_time["isEnabled"]:
+                summer_time_schedule["SummerEnabled"] = "1"
+                summer_time_schedule["SummerEndDay"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[2]))
+                summer_time_schedule["SummerEndMonth"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[1]))
+                summer_time_schedule["SummerStartDay"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[2]))
+                summer_time_schedule["SummerStartMonth"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[1]))
+            else:
+                summer_time_schedule["SummerEnabled"] = "0"
+            return summer_time_schedule
 
         if not self._thermostat_data or force_reload:
             self._load_raw_device_data(force_reload)
@@ -503,10 +537,10 @@ class FritzAdvancedThermostat:
                     self._thermostat_data[name]["WindowOpenTimer"] = str(
                         __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "temperatureDropDetection")["doNotHeatOffsetInMinutes"])
                     # WindowOpenTrigger musst always be + 3
-                    # xhr - json    GUI
-                    #  4     1   -> niedrig
-                    #  8     5   -> mittel
-                    #  12    9   -> hoch
+                    #   xhr  -  json     GUI
+                    # 4  (01)    1   -> niedrig
+                    # 8  (10)    5   -> mittel
+                    # 12 (11)    9   -> hoch
                     self._thermostat_data[name]["WindowOpenTrigger"] = str(
                         __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "temperatureDropDetection")["sensitivity"] + 3)
 
@@ -515,8 +549,7 @@ class FritzAdvancedThermostat:
                     self._thermostat_data[name]["lockuiapp"] = __get_lock(locks, "EXTERNAL")
 
                     adaptiv_heating = __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "adaptivHeating")
-                    if adaptiv_heating['isEnabled'] and adaptiv_heating['supported']:
-                        self._thermostat_data[name]["hkr_adaptheat"] = 1
+                    self._thermostat_data[name]["hkr_adaptheat"] = adaptiv_heating['isEnabled'] and adaptiv_heating['supported']
 
                     if not grouped:
                         self._thermostat_data[name]['graphState'] = "1"
@@ -525,34 +558,13 @@ class FritzAdvancedThermostat:
                         self._thermostat_data[name]["Heiztemp"] = __get_temperature(temperatures, "UPPER_TEMPERATURE")
 
                         summer_time = __get_schedule(__get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "timeControl")["timeSchedules"], "SUMMER_TIME")
-                        if summer_time["isEnabled"]:
-                            self._thermostat_data[name]["SummerEnabled"] = "1"
-                            self._thermostat_data[name]["SummerEndDay"] = str(int(summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[2]))
-                            self._thermostat_data[name]["SummerEndMonth"] = str(int(summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[1]))
-                            self._thermostat_data[name]["SummerStartDay"] = str(int(summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[2]))
-                            self._thermostat_data[name]["SummerStartMonth"] = str(int(summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[1]))
-                        else:
-                            self._thermostat_data[name]["SummerEnabled"] = "0"
+                        self._thermostat_data[name] |= __generate_summer_time_schedule(summer_time)
 
                         holidays = __get_schedule(__get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "timeControl")["timeSchedules"], "HOLIDAYS")
-                        if holidays["isEnabled"]:
-                            holiday_id_count = 0
-                            for i, holiday in enumerate(holidays["actions"], 1):
-                                if holiday["isEnabled"]:
-                                    holiday_id_count += 1
-                                    self._thermostat_data[name][f"Holiday{i}Enabled"] = "1"
-                                    self._thermostat_data[name][f"Holiday{holiday_id_count!s}ID"] = holiday_id_count
-                                    self._thermostat_data[name][f"Holiday{i}EndDay"] = str(int(holiday["timeSetting"]["endDate"].split("-")[2]))
-                                    self._thermostat_data[name][f"Holiday{i}EndHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
-                                    self._thermostat_data[name][f"Holiday{i}EndMonth"] = str(int(holiday["timeSetting"]["endDate"].split("-")[1]))
-                                    self._thermostat_data[name][f"Holiday{i}StartDay"] = str(int(holiday["timeSetting"]["startDate"].split("-")[2]))
-                                    self._thermostat_data[name][f"Holiday{i}StartHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
-                                    self._thermostat_data[name][f"Holiday{i}StartMonth"] = str(int(holiday["timeSetting"]["startDate"].split("-")[1]))
-                            self._thermostat_data[name]["HolidayEnabledCount"] = str(holiday_id_count - 1)
-                            self._thermostat_data[name]["Holidaytemp"] = __get_holiday_temp(device["id"])
+                        self._thermostat_data[name] |= __generate_holiday_schedule(holidays)
 
                         raw_weekly_timetable = __get_schedule(__get_object(device, "THERMOSTAT", "SmartHomeThermostat", "timeControl")["timeSchedules"], "TEMPERATURE")
-                        self._thermostat_data[name] = self._thermostat_data[name] | __generate_weekly_timers(raw_weekly_timetable)
+                        self._thermostat_data[name] |= __generate_weekly_timers(raw_weekly_timetable)
 
     def _get_device_id_by_name(self, device_name: str) -> int:
         self._load_raw_device_data()
