@@ -71,6 +71,7 @@ class ThermostatDataGenerator():
         self._logger = logging.getLogger("FritzAdvancedThermostatLogger")
 
     def _get_object(self, device: dict, unit_name: str, skill_type: str, skill_name: str | None = None) -> any:
+        self._logger.debug("Getting object: unit_name=%s, skill_type=%s, skill_name=%s", unit_name, skill_type, skill_name)
         thermostat_obj = None
         for unit in device["units"]:
             if unit["type"] == unit_name:
@@ -78,43 +79,66 @@ class ThermostatDataGenerator():
                     for skill in unit["skills"]:
                         if skill["type"] == skill_type:
                             thermostat_obj = skill[skill_name]
+                            self._logger.debug("Found object: %s", thermostat_obj)
                 else:
                     thermostat_obj = unit
+                    self._logger.debug("Found unit: %s", thermostat_obj)
+        if thermostat_obj is None:
+            self._logger.warning("Object not found: unit_name=%s, skill_type=%s", unit_name, skill_type)
         return thermostat_obj
 
     def _get_schedule(self, schedules: list, schedule_name: str) -> dict | None:
+        self._logger.debug("Getting schedule: %s", schedule_name)
         schedule = [x for x in schedules if x["name"] == schedule_name]
-        return schedule[0] if schedule else None
+        if schedule:
+            self._logger.debug("Schedule found: %s", schedule[0])
+            return schedule[0]
+        else:
+            self._logger.warning("Schedule not found: %s", schedule_name)
+            return None
 
     def _get_temperature(self, presets: list, target: str) -> str:
-        temp = "7.5" # Represents Off / AUS
+        self._logger.debug("Getting temperature preset: %s", target)
+        temp = "7.5"  # Default: Off/AUS
         for preset in presets:
             if preset["name"] == target:
                 temp = str(preset["temperature"])
+                self._logger.debug("Temperature found: %s", temp)
+                break
         return temp
 
     def _get_lock(self, locks: list, target: str) -> bool:
+        self._logger.debug("Checking lock status: %s", target)
         locked = False
         for lock in locks:
             if lock["devControlName"] == target and lock["isLocked"]:
                 locked = True
+                self._logger.debug("%s is locked", target)
+                break
         return locked
 
     def _get_holiday_temp(self, device_id: int) -> str:
         # I found no other way then to parse the HTML with a regex, I don't know where I can find this.
+        self._logger.info("Getting holiday temperature for device ID: %s", device_id)
         payload = {
             "sid": self._sid,
             "xhr": "1",
             "device": device_id,
-            "page": "home_auto_hkr_edit"}
-        response = self.fritz_requests.post(payload, "data.lua")
+            "page": "home_auto_hkr_edit"
+        }
+        response = self._fritz_requests.post(payload, "data.lua")
         regex = r'(?<=<input type="hidden" name="Holidaytemp" value=")\d+\.?\d?(?=" id="uiNum:Holidaytemp">)'
-        return re.findall(regex, response)[0]
+        holiday_temp = re.findall(regex, response)[0]
+        self._logger.debug("Holiday temperature found: %s", holiday_temp)
+        return holiday_temp
 
     def _first_day_in_bitmask(self, bitmask: int) -> int:
+        self._logger.debug("Determining first day in bitmask: %s", bitmask)
         for i in range(7):
             if bitmask & (1 << i):
+                self._logger.debug("First day in bitmask: %s", i)
                 return i
+        self._logger.warning("No day found in bitmask")
         return -1
 
     def _generate_weekly_timers(self, raw_timers: dict) -> dict:
@@ -129,6 +153,8 @@ class ThermostatDataGenerator():
         timer_item_0=  0530 ;    1   ; 127
         This means turn the device on at 5:30 on all days of the week
         """
+
+        self._logger.debug("Generating weekly timers for raw timers: %s", raw_timers)
 
         weekly_timers = {}
         # day - bitmask mapping
@@ -176,10 +202,14 @@ class ThermostatDataGenerator():
 
         for i, ((time_str, category), bitmask) in enumerate(sorted_times):
             weekly_timers[f"timer_item_{i}"] = "{time_str};{category};{bitmask}"
+            self._logger.debug("Generated weekly timer: timer_item_%s = %s", i, weekly_timers[f"timer_item_{i}"])
 
+        self._logger.info("Weekly timers generation complete")
         return weekly_timers
 
     def _generate_holiday_schedule(self, raw_holidays: dict, device_id) -> dict:
+        self._logger.debug("Generating holiday schedule for device %s", device_id)
+        
         holiday_schedule = {}
         if raw_holidays["isEnabled"]:
             holiday_id_count = 0
@@ -194,12 +224,21 @@ class ThermostatDataGenerator():
                     holiday_schedule[f"Holiday{i}StartDay"] = str(int(holiday["timeSetting"]["startDate"].split("-")[2]))
                     holiday_schedule[f"Holiday{i}StartHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
                     holiday_schedule[f"Holiday{i}StartMonth"] = str(int(holiday["timeSetting"]["startDate"].split("-")[1]))
+                    self._logger.debug("Holiday schedule %s generated: %s", i, holiday_schedule)
+
             holiday_schedule["HolidayEnabledCount"] = str(holiday_id_count - 1)
             holiday_schedule["Holidaytemp"] = self._get_holiday_temp(device_id)
+            self._logger.debug("Holiday temperature for device %s: %s", device_id, holiday_schedule["Holidaytemp"])
+        else:
+            self._logger.info("Holiday schedule is not enabled for device %s", device_id)
 
+        self._logger.info("Holiday schedule generation complete for device %s", device_id)
         return holiday_schedule
 
+
     def _generate_summer_time_schedule(self, raw_summer_time: dict) -> dict:
+        self._logger.debug("Generating summer time schedule")
+        
         summer_time_schedule = {}
         if raw_summer_time["isEnabled"]:
             summer_time_schedule["SummerEnabled"] = "1"
@@ -207,16 +246,24 @@ class ThermostatDataGenerator():
             summer_time_schedule["SummerEndMonth"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[1]))
             summer_time_schedule["SummerStartDay"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[2]))
             summer_time_schedule["SummerStartMonth"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[1]))
+            self._logger.debug("Summer time schedule generated: %s", summer_time_schedule)
         else:
             summer_time_schedule["SummerEnabled"] = "0"
+            self._logger.info("Summer time schedule is not enabled")
+
+        self._logger.info("Summer time schedule generation complete")
         return summer_time_schedule
 
+
     def generate(self, raw_device_data) -> dict:
+        self._logger.debug("Starting to generate thermostat data for raw device data: %s", raw_device_data)
+
         thermostat_data = {}
         for device in raw_device_data["devices"]:
             name = device["displayName"]
             grouped = name in [i["displayName"] for i in [i["members"] for i in raw_device_data["groups"]][0]]
             if device["category"] == "THERMOSTAT":
+                self._logger.debug("Processing thermostat device: %s", name)
                 thermostat_data[name] = {}
                 thermostat_data[name]["Offset"] = str(
                     self._get_object(device, "TEMPERATURE_SENSOR",  "SmartHomeTemperatureSensor", "offset"))
@@ -229,27 +276,41 @@ class ThermostatDataGenerator():
                 # 12 (11)    9   -> hoch
                 thermostat_data[name]["WindowOpenTrigger"] = str(
                     self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "temperatureDropDetection")["sensitivity"] + 3)
+                self._logger.debug("Offset and window settings for %s: Offset=%s, WindowOpenTimer=%s, WindowOpenTrigger=%s",
+                                name, thermostat_data[name]["Offset"], thermostat_data[name]["WindowOpenTimer"], thermostat_data[name]["WindowOpenTrigger"])
 
                 locks = self._get_object(device, "THERMOSTAT", "SmartHomeThermostat")["interactionControls"]
                 thermostat_data[name]["locklocal"] = self._get_lock(locks, "BUTTON")
                 thermostat_data[name]["lockuiapp"] = self._get_lock(locks, "EXTERNAL")
+                self._logger.debug("Lock settings for %s: locklocal=%s, lockuiapp=%s", 
+                                name, thermostat_data[name]["locklocal"], thermostat_data[name]["lockuiapp"])
 
                 adaptiv_heating = self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "adaptivHeating")
                 thermostat_data[name]["hkr_adaptheat"] = adaptiv_heating['isEnabled'] and adaptiv_heating['supported']
+                self._logger.debug("Adaptive heating for %s: %s", name, thermostat_data[name]["hkr_adaptheat"])
 
                 if not grouped:
                     thermostat_data[name]['graphState'] = "1"
                     temperatures = self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "presets")
                     thermostat_data[name]["Absenktemp"] = self._get_temperature(temperatures, "LOWER_TEMPERATURE")
                     thermostat_data[name]["Heiztemp"] = self._get_temperature(temperatures, "UPPER_TEMPERATURE")
+                    self._logger.debug("Temperature settings for %s: Absenktemp=%s, Heiztemp=%s", 
+                                    name, thermostat_data[name]["Absenktemp"], thermostat_data[name]["Heiztemp"])
 
-                    summer_time = self._get_schedule(self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "timeControl")["timeSchedules"], "SUMMER_TIME")
-                    thermostat_data[name] |= self._generate_summer_time_schedule(summer_time)
+                    summer_time = self._get_schedule(self._get_object(device, "THERMOSTAT", "SmartHomeThermostat", "timeControl")["timeSchedules"], "SUMMER_TIME")
+                    if summer_time:
+                        thermostat_data[name] |= self._generate_summer_time_schedule(summer_time)
+                        self._logger.debug("Summer time schedule for %s generated", name)
 
-                    holidays = self._get_schedule(self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "timeControl")["timeSchedules"], "HOLIDAYS")
-                    thermostat_data[name] |= self._generate_holiday_schedule(holidays, device["id"])
+                    holidays = self._get_schedule(self._get_object(device, "THERMOSTAT", "SmartHomeThermostat", "timeControl")["timeSchedules"], "HOLIDAYS")
+                    if holidays:
+                        thermostat_data[name] |= self._generate_holiday_schedule(holidays, device["id"])
+                        self._logger.debug("Holiday schedule for %s generated", name)
 
                     raw_weekly_timetable = self._get_schedule(self._get_object(device, "THERMOSTAT", "SmartHomeThermostat", "timeControl")["timeSchedules"], "TEMPERATURE")
-                    thermostat_data[name] |= self._generate_weekly_timers(raw_weekly_timetable)
+                    if raw_weekly_timetable:
+                        thermostat_data[name] |= self._generate_weekly_timers(raw_weekly_timetable)
+                        self._logger.debug("Weekly timers for %s generated", name)
 
+        self._logger.info("Thermostat data generation complete")
         return thermostat_data
