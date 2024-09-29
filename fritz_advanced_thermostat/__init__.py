@@ -34,23 +34,16 @@ Dependencies:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import re
 import sys
-import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
-import requests
-import urllib3
 from packaging import version
 
-from utils import FritzRequests, ThermostatDataGenerator, Logger
-from errors import FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatConnectionError, FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatKeyError
-
-# Silence annoying urllib3 Unverified HTTPS warnings, even so if we have checked verify ssl false in requests
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from utils import FritzConnection, ThermostatDataGenerator
+from errors import FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatKeyError
 
 
 PYTHON_VERSION = ".".join([str(x) for x in sys.version_info[0:3]])
@@ -149,6 +142,7 @@ class FritzAdvancedThermostat:
         self._settable_keys = {
             "common": (
                 "Offset",
+                "hkr_adaptheat",
                 "WindowOpenTimer",
                 "WindowOpenTrigger",
                 "locklocal",
@@ -169,84 +163,30 @@ class FritzAdvancedThermostat:
         self._prefixed_host = host if re.match(
             r"^https?://", host) else "https://" + host
 
-        self._sid = self._login(user=user, password=password)
-        self._fritzos = self._get_fritz_os_version()
-
-        self._check_fritzos()
-
         # Setup utils objects
-        self._fritz_req = FritzRequests(self._prefixed_host, retries, timeout, ssl_verify)
-        self._thermostat_data_generator = ThermostatDataGenerator(self._sid, self._fritz_req.post)
+        self._fritz_conn = FritzConnection(self._prefixed_host, retries, timeout, ssl_verify)
+        self._fritz_conn.login(user=user, password=password)
+        self._thermostat_data_generator = ThermostatDataGenerator(self._fritz_conn)
 
-    def _login(self, user: str, password: str) -> str:
-        url = "/".join([self._prefixed_host, f"login_sid.lua?version=2&user={user}"])
-        response = requests.get(
-            url, verify=self._ssl_verify, timeout=self._timeout)
-
-        xml_root = ET.fromstring(response.content)
-        sid = xml_root.findtext("SID")
-
-        if sid == "0000000000000000":
-            challenge_parts = xml_root.findtext("Challenge").split("$")
-            iter1 = int(challenge_parts[1])
-            salt1 = bytes.fromhex(challenge_parts[2])
-            iter2 = int(challenge_parts[3])
-            salt2 = bytes.fromhex(challenge_parts[4])
-
-            hash1 = hashlib.pbkdf2_hmac(
-                "sha256", password.encode("utf-8"), salt1, iter1)
-            hash2 = hashlib.pbkdf2_hmac("sha256", hash1, salt2, iter2)
-
-            payload = {
-                "response": f"{salt2.hex()}${hash2.hex()}",
-                "user": user,
-            }
-            login_response = requests.post(
-                url, data=payload, verify=self._ssl_verify, timeout=self._timeout)
-            login_root = ET.fromstring(login_response.content)
-
-            sid = login_root.findtext("SID")
-
-            if sid == "0000000000000000":
-                err = "Invalid user or password!"
+        # Check FritzOS version
+        self._fritzos = self._fritz_conn.get_fritz_os_version()
+        if self._fritzos not in self._supported_firmware:
+            if self._experimental:
+                self._logger.warning("You're using an untested firmware!")
+            else:
+                err = "Error: Firmenware " + self._fritzos + "is unsupported"
                 self._logger.error(err)
-                raise FritzAdvancedThermostatConnectionError(err)
-        return sid
-
-    def _get_fritz_os_version(self) -> str:
-        payload = {
-            "sid": self._sid,
-            "xhr": "1",
-            "page": "overview",
-            "xhrId": "first",
-            "noMenuRef": "1"}
-        response = self._fritz_req.post(
-            payload, "data.lua")
-
-        try:
-            req_data = json.loads(response)
-        except json.decoder.JSONDecodeError as e:
-            err = "Error: Didn't get a valid json response when loading data\n" + response
-            self._logger.exception(err)
-            raise FritzAdvancedThermostatExecutionError(err) from e
-
-        if "fritzos" not in req_data["data"]:
-            err = "Error: Something went wrong loading the fritzos meta data\n" + response
-            self._logger.error(err)
-            raise FritzAdvancedThermostatExecutionError(err)
-
-        return req_data["data"]["fritzos"]["nspver"]
+                raise FritzAdvancedThermostatCompatibilityError(err)
 
     def _load_raw_device_data(self, force_reload: bool = False) -> None:
         if not self._raw_device_data or force_reload:
             payload = {
-                "sid": self._sid,
                 "xhr": "1",
                 "page": "sh_dev",
                 "xhrId": "all",
                 "useajax": "1"}
 
-            response = self._fritz_req.post(
+            response = self._fritz_conn.post_req(
                 payload, "data.lua")
 
             try:
@@ -266,15 +206,6 @@ class FritzAdvancedThermostat:
         self._load_raw_device_data(force_reload)
         if not self._thermostat_data or force_reload:
             self._thermostat_data = self._thermostat_data_generator.generate(self._raw_device_data)
-
-    def _check_fritzos(self) -> None:
-        if self._fritzos not in self._supported_firmware:
-            if self._experimental:
-                self._logger.warning("You're using an untested firmware!")
-            else:
-                err = "Error: Firmenware " + self._fritzos + "is unsupported"
-                self._logger.error(err)
-                raise FritzAdvancedThermostatCompatibilityError(err)
 
     def _check_device_name(self, device_name: str) -> None:
         self._generate_thermostat_data()
@@ -312,7 +243,6 @@ class FritzAdvancedThermostat:
     def _generate_data_pkg(self, device_name: str, dry_run: bool = False) -> str:
         self._generate_thermostat_data()
         data_dict = {
-            "sid": self._sid,
             "device": self._get_device_id_by_name(device_name),
             "view": None,
             "back_to_page": "sh_dev",
@@ -321,16 +251,16 @@ class FritzAdvancedThermostat:
             "ExtTempsensorID": "tochoose",
         }
 
-        data_dict = data_dict | self._thermostat_data[device_name]
+        data_dict |= self._thermostat_data[device_name]
 
         if dry_run:
-            data_dict = data_dict | {
+            data_dict |= {
                 "validate": "apply",
                 "xhr": "1",
                 "useajax": "1",
             }
         else:
-            data_dict = data_dict | {
+            data_dict |= {
                 "xhr": "1",
                 "lang": "de",
                 "apply": None,
@@ -368,7 +298,7 @@ class FritzAdvancedThermostat:
                 site = "net/home_auto_hkr_edit.lua"
                 payload = self._generate_data_pkg(
                     thermostat_name, dry_run=True)
-                dry_run_response = self._fritz_req.post(payload, site)
+                dry_run_response = self._fritz_conn.post_req(payload, site)
                 try:
                     dry_run_check = json.loads(dry_run_response)
                     if not dry_run_check["ok"]:
@@ -389,7 +319,7 @@ class FritzAdvancedThermostat:
                         err) from e
 
             payload = self._generate_data_pkg(thermostat_name, dry_run=False)
-            response = self._fritz_req.post(payload, "data.lua")
+            response = self._fritz_conn.post_req(payload, "data.lua")
             try:
                 check = json.loads(response)
                 if version.parse("7.0") < version.parse(self._fritzos) <= version.parse("7.31") and check["pid"] != "sh_dev":

@@ -1,14 +1,23 @@
 import logging
 import requests
-from errors import FritzAdvancedThermostatConnectionError
+import xml.etree.ElementTree as ET
+import hashlib
 
-class FritzRequests():
+import json
+from errors import FritzAdvancedThermostatConnectionError, FritzAdvancedThermostatExecutionError
+
+import urllib3
+# Silence annoying urllib3 Unverified HTTPS warnings, even so if we have checked verify ssl false in requests
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+class FritzConnection():
     def __init__(self, prefixed_host: str, max_retries: int, timeout: int, ssl_verify: bool) -> None:
         self._prefixed_host = prefixed_host
         self._max_retries = max_retries
         self._timeout = timeout
         self._ssl_verify = ssl_verify
         self._logger = logging.getLogger("FritzAdvancedThermostatLogger")
+        self._sid = None
 
     def _generate_headers(self, data: dict) -> dict:
         self._logger.debug("Generating headers for the request.")
@@ -27,8 +36,9 @@ class FritzRequests():
         self._logger.debug("Headers generated: %s", headers)
         return headers
 
-    def post(self, payload: dict, site: str) -> dict:
+    def post_req(self, payload: dict, site: str) -> dict:
         url = f"{self._prefixed_host}/{site}"
+        payload = {"sid": self._sid} | payload
         self._logger.info("Sending POST request to %s", url)
         self._logger.debug("Payload: %s", payload)
 
@@ -53,21 +63,78 @@ class FritzRequests():
                     self._logger.error(err)
                     raise FritzAdvancedThermostatConnectionError(err) from e
                 self._logger.info("Retrying request, attempt %s of %s", retries + 1, self._max_retries)
-        
+
         self._logger.debug("Received response with status code: %s", response.status_code)
-        
+
         if response.status_code != requests.codes.ok:
             err = "Error: " + str(response.status_code)
             self._logger.error("Request failed: %s", err)
             raise FritzAdvancedThermostatConnectionError(err)
-        
+
         self._logger.debug("Response received: %s", response.text)
         return response.text
 
-class ThermostatDataGenerator():
-    def __init__(self, sid: str, fritz_requests: FritzRequests) -> None:
+    def login(self, user: str, password: str) -> str:
+        url = "/".join([self._prefixed_host, f"login_sid.lua?version=2&user={user}"])
+        response = requests.get(
+            url, verify=self._ssl_verify, timeout=self._timeout)
+
+        xml_root = ET.fromstring(response.content)
+        sid = xml_root.findtext("SID")
+
+        if sid == "0000000000000000":
+            challenge_parts = xml_root.findtext("Challenge").split("$")
+            iter1 = int(challenge_parts[1])
+            salt1 = bytes.fromhex(challenge_parts[2])
+            iter2 = int(challenge_parts[3])
+            salt2 = bytes.fromhex(challenge_parts[4])
+
+            hash1 = hashlib.pbkdf2_hmac(
+                "sha256", password.encode("utf-8"), salt1, iter1)
+            hash2 = hashlib.pbkdf2_hmac("sha256", hash1, salt2, iter2)
+
+            payload = {
+                "response": f"{salt2.hex()}${hash2.hex()}",
+                "user": user,
+            }
+            login_response = requests.post(
+                url, data=payload, verify=self._ssl_verify, timeout=self._timeout)
+            login_root = ET.fromstring(login_response.content)
+
+            sid = login_root.findtext("SID")
+
+            if sid == "0000000000000000":
+                err = "Invalid user or password!"
+                self._logger.error(err)
+                raise FritzAdvancedThermostatConnectionError(err)
         self._sid = sid
-        self._fritz_requests = fritz_requests
+
+    def get_fritz_os_version(self) -> str:
+        payload = {
+            "xhr": "1",
+            "page": "overview",
+            "xhrId": "first",
+            "noMenuRef": "1"}
+        response = self.post_req(
+            payload, "data.lua")
+
+        try:
+            req_data = json.loads(response)
+        except json.decoder.JSONDecodeError as e:
+            err = "Error: Didn't get a valid json response when loading data\n" + response
+            self._logger.exception(err)
+            raise FritzAdvancedThermostatExecutionError(err) from e
+
+        if "fritzos" not in req_data["data"]:
+            err = "Error: Something went wrong loading the fritzos meta data\n" + response
+            self._logger.error(err)
+            raise FritzAdvancedThermostatExecutionError(err)
+
+        return req_data["data"]["fritzos"]["nspver"]
+
+class ThermostatDataGenerator():
+    def __init__(self, fritz_conn: FritzConnection) -> None:
+        self._fritz_requests = fritz_conn
         self._logger = logging.getLogger("FritzAdvancedThermostatLogger")
 
     def _get_object(self, device: dict, unit_name: str, skill_type: str, skill_name: str | None = None) -> any:
@@ -121,12 +188,11 @@ class ThermostatDataGenerator():
         # I found no other way then to parse the HTML with a regex, I don't know where I can find this.
         self._logger.info("Getting holiday temperature for device ID: %s", device_id)
         payload = {
-            "sid": self._sid,
             "xhr": "1",
             "device": device_id,
             "page": "home_auto_hkr_edit"
         }
-        response = self._fritz_requests.post(payload, "data.lua")
+        response = self._fritz_requests.post_req(payload, "data.lua")
         regex = r'(?<=<input type="hidden" name="Holidaytemp" value=")\d+\.?\d?(?=" id="uiNum:Holidaytemp">)'
         holiday_temp = re.findall(regex, response)[0]
         self._logger.debug("Holiday temperature found: %s", holiday_temp)
@@ -209,7 +275,7 @@ class ThermostatDataGenerator():
 
     def _generate_holiday_schedule(self, raw_holidays: dict, device_id) -> dict:
         self._logger.debug("Generating holiday schedule for device %s", device_id)
-        
+
         holiday_schedule = {}
         if raw_holidays["isEnabled"]:
             holiday_id_count = 0
@@ -238,7 +304,7 @@ class ThermostatDataGenerator():
 
     def _generate_summer_time_schedule(self, raw_summer_time: dict) -> dict:
         self._logger.debug("Generating summer time schedule")
-        
+
         summer_time_schedule = {}
         if raw_summer_time["isEnabled"]:
             summer_time_schedule["SummerEnabled"] = "1"
@@ -282,7 +348,7 @@ class ThermostatDataGenerator():
                 locks = self._get_object(device, "THERMOSTAT", "SmartHomeThermostat")["interactionControls"]
                 thermostat_data[name]["locklocal"] = self._get_lock(locks, "BUTTON")
                 thermostat_data[name]["lockuiapp"] = self._get_lock(locks, "EXTERNAL")
-                self._logger.debug("Lock settings for %s: locklocal=%s, lockuiapp=%s", 
+                self._logger.debug("Lock settings for %s: locklocal=%s, lockuiapp=%s",
                                 name, thermostat_data[name]["locklocal"], thermostat_data[name]["lockuiapp"])
 
                 adaptiv_heating = self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "adaptivHeating")
@@ -294,7 +360,7 @@ class ThermostatDataGenerator():
                     temperatures = self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "presets")
                     thermostat_data[name]["Absenktemp"] = self._get_temperature(temperatures, "LOWER_TEMPERATURE")
                     thermostat_data[name]["Heiztemp"] = self._get_temperature(temperatures, "UPPER_TEMPERATURE")
-                    self._logger.debug("Temperature settings for %s: Absenktemp=%s, Heiztemp=%s", 
+                    self._logger.debug("Temperature settings for %s: Absenktemp=%s, Heiztemp=%s",
                                     name, thermostat_data[name]["Absenktemp"], thermostat_data[name]["Heiztemp"])
 
                     summer_time = self._get_schedule(self._get_object(device, "THERMOSTAT", "SmartHomeThermostat", "timeControl")["timeSchedules"], "SUMMER_TIME")
