@@ -6,48 +6,62 @@ class FritzRequests():
     def __init__(self, prefixed_host: str, max_retries: int, timeout: int, ssl_verify: bool) -> None:
         self._prefixed_host = prefixed_host
         self._max_retries = max_retries
-        self._timeout =timeout
+        self._timeout = timeout
         self._ssl_verify = ssl_verify
         self._logger = logging.getLogger("FritzAdvancedThermostatLogger")
 
     def _generate_headers(self, data: dict) -> dict:
-        return {
+        self._logger.debug("Generating headers for the request.")
+        headers = {
             "Accept": "*/*",
             "Content-Type": "application/x-www-form-urlencoded",
             "Origin": self._prefixed_host,
             "Content-Length": str(len(data)),
             "Accept-Language": "en-GB,en;q=0.9",
             "Host": self._prefixed_host.split("://")[1],
-            "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Safari/605.1.15",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Safari/605.1.15",
             "Referer": self._prefixed_host,
             "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive",
         }
+        self._logger.debug("Headers generated: %s", headers)
+        return headers
 
     def post(self, payload: dict, site: str) -> dict:
         url = f"{self._prefixed_host}/{site}"
+        self._logger.info("Sending POST request to %s", url)
+        self._logger.debug("Payload: %s", payload)
+
         retries = 0
         while retries <= self._max_retries:
             try:
+                self._logger.debug("Attempt %s of %s", retries + 1, self._max_retries)
                 response = requests.post(
                     url,
                     headers=self._generate_headers(payload),
                     data=payload,
-                    verify=self._ssl_verify, timeout=self._timeout)
+                    verify=self._ssl_verify,
+                    timeout=self._timeout
+                )
+                self._logger.info("Request successful on attempt %s", retries + 1)
                 break
-            except ConnectionError as e:
-                self._logger.warning("Connection Error on loading data")
+            except requests.ConnectionError as e:
+                self._logger.warning("Connection Error on attempt %s: %s", retries + 1, e)
                 retries += 1
                 if retries > self._max_retries:
-                    err = "Tried 3 times, got Connection Error on loading raw thermostat data"
+                    err = "Tried %s times, Connection Error on loading raw thermostat data" % self._max_retries
+                    self._logger.error(err)
                     raise FritzAdvancedThermostatConnectionError(err) from e
-                self._logger.warning("Retry %s of %s", str(
-                    retries), str(self._max_retries))
+                self._logger.info("Retrying request, attempt %s of %s", retries + 1, self._max_retries)
+        
+        self._logger.debug("Received response with status code: %s", response.status_code)
+        
         if response.status_code != requests.codes.ok:
             err = "Error: " + str(response.status_code)
-            self._logger.error(err)
+            self._logger.error("Request failed: %s", err)
             raise FritzAdvancedThermostatConnectionError(err)
+        
+        self._logger.debug("Response received: %s", response.text)
         return response.text
 
 class ThermostatDataGenerator():
