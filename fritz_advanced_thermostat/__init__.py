@@ -10,9 +10,6 @@ settings. It supports various Fritz!OS versions and includes both stable and exp
 Classes:
     FritzAdvancedThermostat: Main class for interacting with Fritz!DECT thermostats.
 
-Functions:
-    get_logger: Creates and configures a logger instance.
-
 Usage:
     from fritz_advanced_thermostat import FritzAdvancedThermostat
 
@@ -31,7 +28,6 @@ Raises:
 
 Dependencies:
     - requests
-    - urllib3
     - packaging
 
 """
@@ -50,54 +46,14 @@ import requests
 import urllib3
 from packaging import version
 
-
-class FritzAdvancedThermostatExecutionError(Exception):
-    """Unknown error while executing."""
-
-
-class FritzAdvancedThermostatCompatibilityError(Exception):
-    """Fritz!BOX is not compatible with this module."""
-
-
-class FritzAdvancedThermostatKeyError(KeyError):
-    """Error while obtaining a key from the Fritz!BOX."""
-
-
-class FritzAdvancedThermostatConnectionError(ConnectionError):
-    """Error while connecting to the Fritz!BOX."""
-
-
-FritzAdvancedThermostatError = (FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatKeyError, FritzAdvancedThermostatConnectionError)
-
+from utils import FritzRequests, ThermostatDataGenerator, Logger
+from errors import FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatConnectionError, FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatKeyError
 
 # Silence annoying urllib3 Unverified HTTPS warnings, even so if we have checked verify ssl false in requests
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 PYTHON_VERSION = ".".join([str(x) for x in sys.version_info[0:3]])
-
-
-def get_logger(name: str, level: str = "warning") -> logging.Logger:
-    """Create a logger with the given name and logging level.
-
-    Args:
-        name (str): Name of the logger.
-        level (str, optional): Logging level (e.g., "INFO", "DEBUG").
-            Defaults to "warning".
-
-    Returns:
-        logging.Logger: Configured logger instance.
-
-    """
-    logger = logging.getLogger(name)
-    logger.setLevel(level.upper())
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logger.level)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(levelname)s - %(message)s", "%Y-%m-%d %H:%M:%S")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    return logger
 
 
 class FritzAdvancedThermostat:
@@ -143,7 +99,6 @@ class FritzAdvancedThermostat:
             host: str,
             user: str,
             password: str,
-            log_level: str = "warning",
             timeout: int = 60,
             retries: int = 3,
             ssl_verify: bool = False,
@@ -170,8 +125,7 @@ class FritzAdvancedThermostat:
             FritzAdvancedThermostatKeyError: If trying to set a thermostat value with an unsupported key.
 
         """
-        self._logger = get_logger(
-            "FritzAdvancedThermostatLogger", level=log_level)
+        self._logger = logging.getLogger("FritzAdvancedThermostatLogger")
 
         if experimental:
             self._logger.warning("Experimental mode! All checks disabled!")
@@ -187,7 +141,6 @@ class FritzAdvancedThermostat:
         self._experimental = experimental
         self._ssl_verify = ssl_verify
         self._timeout = timeout
-        self._retries = retries
         # Set data structures
         self._thermostat_data = {}
         self._raw_device_data = {}
@@ -220,6 +173,10 @@ class FritzAdvancedThermostat:
         self._fritzos = self._get_fritz_os_version()
 
         self._check_fritzos()
+
+        # Setup utils objects
+        self._fritz_req = FritzRequests(self._prefixed_host, retries, timeout, ssl_verify)
+        self._thermostat_data_generator = ThermostatDataGenerator(self._sid, self._fritz_req.post)
 
     def _login(self, user: str, password: str) -> str:
         url = "/".join([self._prefixed_host, f"login_sid.lua?version=2&user={user}"])
@@ -256,46 +213,6 @@ class FritzAdvancedThermostat:
                 raise FritzAdvancedThermostatConnectionError(err)
         return sid
 
-    def _generate_headers(self, data: dict) -> dict:
-        return {
-            "Accept": "*/*",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": self._prefixed_host,
-            "Content-Length": str(len(data)),
-            "Accept-Language": "en-GB,en;q=0.9",
-            "Host": self._prefixed_host.split("://")[1],
-            "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Safari/605.1.15",
-            "Referer": self._prefixed_host,
-            "Accept-Encoding": "gzip, deflate",
-            "Connection": "keep-alive",
-        }
-
-    def _fritz_post_req(self, payload: dict, site: str) -> dict:
-        url = f"{self._prefixed_host}/{site}"
-        retries = 0
-        while retries <= self._retries:
-            try:
-                response = requests.post(
-                    url,
-                    headers=self._generate_headers(payload),
-                    data=payload,
-                    verify=self._ssl_verify, timeout=self._timeout)
-                break
-            except ConnectionError as e:
-                self._logger.warning("Connection Error on loading data")
-                retries += 1
-                if retries > self._retries:
-                    err = "Tried 3 times, got Connection Error on loading raw thermostat data"
-                    raise FritzAdvancedThermostatConnectionError(err) from e
-                self._logger.warning("Retry %s of %s", str(
-                    retries), str(self._retries))
-        if response.status_code != requests.codes.ok:
-            err = "Error: " + str(response.status_code)
-            self._logger.error(err)
-            raise FritzAdvancedThermostatConnectionError(err)
-        return response.text
-
     def _get_fritz_os_version(self) -> str:
         payload = {
             "sid": self._sid,
@@ -303,7 +220,7 @@ class FritzAdvancedThermostat:
             "page": "overview",
             "xhrId": "first",
             "noMenuRef": "1"}
-        response = self._fritz_post_req(
+        response = self._fritz_req.post(
             payload, "data.lua")
 
         try:
@@ -329,7 +246,7 @@ class FritzAdvancedThermostat:
                 "xhrId": "all",
                 "useajax": "1"}
 
-            response = self._fritz_post_req(
+            response = self._fritz_req.post(
                 payload, "data.lua")
 
             try:
@@ -344,6 +261,11 @@ class FritzAdvancedThermostat:
                 self._logger.error(err)
                 raise FritzAdvancedThermostatExecutionError(err)
             self._raw_device_data = req_data["data"]
+
+    def _generate_thermostat_data(self, force_reload: bool = False) -> None:
+        self._load_raw_device_data(force_reload)
+        if not self._thermostat_data or force_reload:
+            self._thermostat_data = self._thermostat_data_generator.generate(self._raw_device_data)
 
     def _check_fritzos(self) -> None:
         if self._fritzos not in self._supported_firmware:
@@ -382,189 +304,6 @@ class FritzAdvancedThermostat:
                     " ".join(settable_keys)
                 self._logger.error(err)
                 raise FritzAdvancedThermostatKeyError(err)
-
-    def _generate_thermostat_data(self, force_reload: bool = False) -> None:
-        def __get_object(device: dict, unit_name: str, skill_type: str, skill_name: str | None = None) -> any:
-            thermostat_obj = None
-            for unit in device["units"]:
-                if unit["type"] == unit_name:
-                    if skill_name:
-                        for skill in unit["skills"]:
-                            if skill["type"] == skill_type:
-                                thermostat_obj = skill[skill_name]
-                    else:
-                        thermostat_obj = unit
-            return thermostat_obj
-
-        def __get_schedule(schedules: list, schedule_name: str) -> dict | None:
-            schedule = [x for x in schedules if x["name"] == schedule_name]
-            return schedule[0] if schedule else None
-
-        def __get_temperature(presets: list, target: str) -> str:
-            temp = "7.5" # Represents Off / AUS
-            for preset in presets:
-                if preset["name"] == target:
-                    temp = str(preset["temperature"])
-            return temp
-
-        def __get_lock(locks: list, target: str) -> bool:
-            locked = False
-            for lock in locks:
-                if lock["devControlName"] == target and lock["isLocked"]:
-                    locked = True
-            return locked
-
-        def __get_holiday_temp(device_id: int) -> str:
-            # I found no other way then to parse the HTML with a regex, I don't know where I can find this.
-            payload = {
-                "sid": self._sid,
-                "xhr": "1",
-                "device": device_id,
-                "page": "home_auto_hkr_edit"}
-            response = self._fritz_post_req(payload, "data.lua")
-            regex = r'(?<=<input type="hidden" name="Holidaytemp" value=")\d+\.?\d?(?=" id="uiNum:Holidaytemp">)'
-            return re.findall(regex, response)[0]
-
-        def __first_day_in_bitmask(bitmask: int) -> int:
-            for i in range(7):
-                if bitmask & (1 << i):
-                    return i
-            return -1
-
-        def __generate_weekly_timers(raw_timers: dict) -> dict:
-            """
-            Week Binary Conversion (reversed)
-            Mo Tu We Th Fr Sa Su
-            1  1  1  1  1  1  1  = 127
-            1  0  0  0  0  1  0  = 33
-            0  0  1  1  0  1  0  = 44
-
-            timer_item_x=${TIME};${STATE};${DAYS}
-            timer_item_0=  0530 ;    1   ; 127
-            This means turn the device on at 5:30 on all days of the week
-            """
-
-            weekly_timers = {}
-            # day - bitmask mapping
-            day_to_bit = {
-                'MON': 1 << 0,   # Monday -> 1
-                'TUE': 1 << 1,   # Tuesday -> 2
-                'WED': 1 << 2,   # Wednesday -> 4
-                'THU': 1 << 3,   # Thursday -> 8
-                'FRI': 1 << 4,   # Friday -> 16
-                'SAT': 1 << 5,   # Saturday -> 32
-                'SUN': 1 << 6    # Sunday -> 64
-            }
-
-            # action states mapping
-            set_action = {
-                'UPPER_TEMPERATURE': 1,
-                'LOWER_TEMPERATURE': 0,
-                'SET_OFF': 0
-            }
-            combined_times = {}
-            for action in raw_timers['actions']:
-                day = action['timeSetting']['dayOfWeek']
-                start_time = action['timeSetting']['startTime']
-
-                if 'presetTemperature' in action['description']:
-                    state = action['description']['presetTemperature']['name']
-                elif action['description']['action'] == 'SET_OFF':
-                    state = 'SET_OFF'
-
-                # Get bitmask and category for the action
-                if day in day_to_bit:
-                    bitmask = day_to_bit[day]
-                    category = set_action[state]
-                    time_str = start_time.replace(':', '')[:4]  # Format time to HHMM
-                    key = (time_str, category)
-
-                    # Initialize bitmask if not present
-                    if key not in combined_times:
-                        combined_times[key] = 0
-
-                    # Update the bitmask for the day
-                    combined_times[key] |= bitmask
-
-            sorted_times = sorted(combined_times.items(), key=lambda x: (__first_day_in_bitmask(x[1]), x[0][0]))
-
-            for i, ((time_str, category), bitmask) in enumerate(sorted_times):
-                weekly_timers[f"timer_item_{i}"] = "{time_str};{category};{bitmask}"
-
-            return weekly_timers
-
-        def __generate_holiday_schedule(raw_holidays: dict) -> dict:
-            holiday_schedule = {}
-            if holidays["isEnabled"]:
-                holiday_id_count = 0
-                for i, holiday in enumerate(raw_holidays["actions"], 1):
-                    if holiday["isEnabled"]:
-                        holiday_id_count += 1
-                        holiday_schedule[f"Holiday{i}Enabled"] = "1"
-                        holiday_schedule[f"Holiday{holiday_id_count!s}ID"] = holiday_id_count
-                        holiday_schedule[f"Holiday{i}EndDay"] = str(int(holiday["timeSetting"]["endDate"].split("-")[2]))
-                        holiday_schedule[f"Holiday{i}EndHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
-                        holiday_schedule[f"Holiday{i}EndMonth"] = str(int(holiday["timeSetting"]["endDate"].split("-")[1]))
-                        holiday_schedule[f"Holiday{i}StartDay"] = str(int(holiday["timeSetting"]["startDate"].split("-")[2]))
-                        holiday_schedule[f"Holiday{i}StartHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
-                        holiday_schedule[f"Holiday{i}StartMonth"] = str(int(holiday["timeSetting"]["startDate"].split("-")[1]))
-                holiday_schedule["HolidayEnabledCount"] = str(holiday_id_count - 1)
-                holiday_schedule["Holidaytemp"] = __get_holiday_temp(device["id"])
-
-            return holiday_schedule
-
-        def __generate_summer_time_schedule(raw_summer_time: dict) -> dict:
-            summer_time_schedule = {}
-            if raw_summer_time["isEnabled"]:
-                summer_time_schedule["SummerEnabled"] = "1"
-                summer_time_schedule["SummerEndDay"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[2]))
-                summer_time_schedule["SummerEndMonth"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[1]))
-                summer_time_schedule["SummerStartDay"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[2]))
-                summer_time_schedule["SummerStartMonth"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[1]))
-            else:
-                summer_time_schedule["SummerEnabled"] = "0"
-            return summer_time_schedule
-
-        if not self._thermostat_data or force_reload:
-            self._load_raw_device_data(force_reload)
-            for device in self._raw_device_data["devices"]:
-                name = device["displayName"]
-                grouped = name in [i["displayName"] for i in [i["members"] for i in self._raw_device_data["groups"]][0]]
-                if device["category"] == "THERMOSTAT":
-                    self._thermostat_data[name] = {}
-                    self._thermostat_data[name]["Offset"] = str(
-                        __get_object(device, "TEMPERATURE_SENSOR",  "SmartHomeTemperatureSensor", "offset"))
-                    self._thermostat_data[name]["WindowOpenTimer"] = str(
-                        __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "temperatureDropDetection")["doNotHeatOffsetInMinutes"])
-                    # WindowOpenTrigger musst always be + 3
-                    #   xhr  -  json     GUI
-                    # 4  (01)    1   -> niedrig
-                    # 8  (10)    5   -> mittel
-                    # 12 (11)    9   -> hoch
-                    self._thermostat_data[name]["WindowOpenTrigger"] = str(
-                        __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "temperatureDropDetection")["sensitivity"] + 3)
-
-                    locks = __get_object(device, "THERMOSTAT", "SmartHomeThermostat")["interactionControls"]
-                    self._thermostat_data[name]["locklocal"] = __get_lock(locks, "BUTTON")
-                    self._thermostat_data[name]["lockuiapp"] = __get_lock(locks, "EXTERNAL")
-
-                    adaptiv_heating = __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "adaptivHeating")
-                    self._thermostat_data[name]["hkr_adaptheat"] = adaptiv_heating['isEnabled'] and adaptiv_heating['supported']
-
-                    if not grouped:
-                        self._thermostat_data[name]['graphState'] = "1"
-                        temperatures = __get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "presets")
-                        self._thermostat_data[name]["Absenktemp"] = __get_temperature(temperatures, "LOWER_TEMPERATURE")
-                        self._thermostat_data[name]["Heiztemp"] = __get_temperature(temperatures, "UPPER_TEMPERATURE")
-
-                        summer_time = __get_schedule(__get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "timeControl")["timeSchedules"], "SUMMER_TIME")
-                        self._thermostat_data[name] |= __generate_summer_time_schedule(summer_time)
-
-                        holidays = __get_schedule(__get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "timeControl")["timeSchedules"], "HOLIDAYS")
-                        self._thermostat_data[name] |= __generate_holiday_schedule(holidays)
-
-                        raw_weekly_timetable = __get_schedule(__get_object(device, "THERMOSTAT", "SmartHomeThermostat", "timeControl")["timeSchedules"], "TEMPERATURE")
-                        self._thermostat_data[name] |= __generate_weekly_timers(raw_weekly_timetable)
 
     def _get_device_id_by_name(self, device_name: str) -> int:
         self._load_raw_device_data()
@@ -629,7 +368,7 @@ class FritzAdvancedThermostat:
                 site = "net/home_auto_hkr_edit.lua"
                 payload = self._generate_data_pkg(
                     thermostat_name, dry_run=True)
-                dry_run_response = self._fritz_post_req(payload, site)
+                dry_run_response = self._fritz_req.post(payload, site)
                 try:
                     dry_run_check = json.loads(dry_run_response)
                     if not dry_run_check["ok"]:
@@ -650,7 +389,7 @@ class FritzAdvancedThermostat:
                         err) from e
 
             payload = self._generate_data_pkg(thermostat_name, dry_run=False)
-            response = self._fritz_post_req(payload, "data.lua")
+            response = self._fritz_req.post(payload, "data.lua")
             try:
                 check = json.loads(response)
                 if version.parse("7.0") < version.parse(self._fritzos) <= version.parse("7.31") and check["pid"] != "sh_dev":
