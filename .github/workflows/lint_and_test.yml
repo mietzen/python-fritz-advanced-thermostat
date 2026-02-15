@@ -1,4 +1,4 @@
-name: Python Lint
+name: Python Lint & Test
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.12"]
       fail-fast: false
 
     steps:
@@ -25,12 +25,12 @@ jobs:
           pip install ruff
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Lint with ruff
-        env: 
+        env:
           PY_VER: ${{ matrix.python-version }}
         run: |
           # stop the build if there are Python syntax errors or undefined names
           PY_VER=$(echo py${PY_VER} | tr -d '.')
-          ruff check --select "ALL" --ignore='C901,PLR0912,PLR0913,PLR0915,S314,E501,FBT001,FBT002,RUF015,D203,D213' --target-version=${PY_VER} fritz_advanced_thermostat.py
+          ruff check --select "ALL" --ignore='C901,PLR0912,PLR0913,PLR0915,S314,E501,FBT001,FBT002,RUF015,D203,D213' --target-version=${PY_VER} fritz_advanced_thermostat
 
   Check-Test:
     if: ${{ always() }}

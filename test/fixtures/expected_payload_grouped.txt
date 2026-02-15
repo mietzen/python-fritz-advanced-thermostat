@@ -10,4 +10,5 @@ ule_device_name=Living%20Room%20West
 view=
 WindowOpenTimer=10
 WindowOpenTrigger=8
+page=home_auto_hkr_edit
 xhr=1

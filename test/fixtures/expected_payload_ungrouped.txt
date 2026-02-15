@@ -54,4 +54,5 @@ ule_device_name=Kitchen
 view=
 WindowOpenTimer=30
 WindowOpenTrigger=8
+page=home_auto_hkr_edit
 xhr=1

@@ -41,9 +41,18 @@ import sys
 
 from packaging import version
 
+from .errors import (
+    FritzAdvancedThermostatCompatibilityError,
+    FritzAdvancedThermostatExecutionError,
+    FritzAdvancedThermostatKeyError,
+)
+from .errors import (
+    FritzAdvancedThermostatConnectionError as FritzAdvancedThermostatConnectionError,
+)
+from .errors import (
+    FritzAdvancedThermostatError as FritzAdvancedThermostatError,
+)
 from .utils import FritzConnection, ThermostatDataGenerator
-from .errors import FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatConnectionError, FritzAdvancedThermostatError, FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatKeyError
-
 
 PYTHON_VERSION = ".".join([str(x) for x in sys.version_info[0:3]])
 
@@ -255,7 +264,8 @@ class FritzAdvancedThermostat:
         data_dict |= {
             "xhr": "1",
             "lang": "de",
-            "apply": None
+            "apply": None,
+            "page": "home_auto_hkr_edit",
         }
 
         return data_dict

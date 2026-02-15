@@ -1,18 +1,28 @@
-import logging
-import requests
-import xml.etree.ElementTree as ET
-import hashlib
-import re
-from urllib.parse import quote
-import json
-from .errors import FritzAdvancedThermostatConnectionError, FritzAdvancedThermostatExecutionError
+"""Fritz!Box connection and thermostat data generation utilities."""
 
+import hashlib
+import json
+import logging
+import re
+import xml.etree.ElementTree as ET
+from urllib.parse import quote
+
+import requests
 import urllib3
+
+from .errors import (
+    FritzAdvancedThermostatConnectionError,
+    FritzAdvancedThermostatExecutionError,
+)
+
 # Silence annoying urllib3 Unverified HTTPS warnings, even so if we have checked verify ssl false in requests
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-class FritzConnection():
+class FritzConnection:
+    """Handle HTTP communication with the Fritz!Box."""
+
     def __init__(self, prefixed_host: str, max_retries: int, timeout: int, ssl_verify: bool) -> None:
+        """Initialize connection parameters."""
         self._prefixed_host = prefixed_host
         self._max_retries = max_retries
         self._timeout = timeout
@@ -38,6 +48,7 @@ class FritzConnection():
         return headers
 
     def post_req(self, payload: dict, site: str) -> str:
+        """Send a POST request to the Fritz!Box."""
         url = f"{self._prefixed_host}/{site}"
         payload = {"sid": self._sid} | payload
         self._logger.info("Sending POST request to %s", url)
@@ -64,7 +75,7 @@ class FritzConnection():
                     headers=self._generate_headers(payload),
                     data="&".join(data_pkg),
                     verify=self._ssl_verify,
-                    timeout=self._timeout
+                    timeout=self._timeout,
                 )
                 self._logger.info("Request successful on attempt %s", retries + 1)
                 break
@@ -72,8 +83,8 @@ class FritzConnection():
                 self._logger.warning("Connection Error on attempt %s: %s", retries + 1, e)
                 retries += 1
                 if retries > self._max_retries:
-                    err = "Tried %s times, Connection Error on loading raw thermostat data" % self._max_retries
-                    self._logger.error(err)
+                    err = f"Tried {self._max_retries} times, Connection Error on loading raw thermostat data"
+                    self._logger.exception(err)
                     raise FritzAdvancedThermostatConnectionError(err) from e
                 self._logger.info("Retrying request, attempt %s of %s", retries + 1, self._max_retries)
         if not response:
@@ -92,6 +103,7 @@ class FritzConnection():
         return response.text
 
     def login(self, user: str, password: str) -> None:
+        """Authenticate with the Fritz!Box using PBKDF2 challenge-response."""
         url = "/".join([self._prefixed_host, f"login_sid.lua?version=2&user={user}"])
         response = requests.get(
             url, verify=self._ssl_verify, timeout=self._timeout)
@@ -127,6 +139,7 @@ class FritzConnection():
         self._sid = sid
 
     def get_fritz_os_version(self) -> str:
+        """Retrieve the Fritz!OS version from the Fritz!Box."""
         payload = {
             "xhr": "1",
             "page": "overview",
@@ -149,8 +162,11 @@ class FritzConnection():
 
         return req_data["data"]["fritzos"]["nspver"]
 
-class ThermostatDataGenerator():
+class ThermostatDataGenerator:
+    """Generate thermostat data packages from raw Fritz!Box device data."""
+
     def __init__(self, fritz_conn: FritzConnection) -> None:
+        """Initialize with a Fritz!Box connection."""
         self._fritz_requests = fritz_conn
         self._logger = logging.getLogger("FritzAdvancedThermostatLogger")
 
@@ -177,9 +193,8 @@ class ThermostatDataGenerator():
         if schedule:
             self._logger.debug("Schedule found: %s", schedule[0])
             return schedule[0]
-        else:
-            self._logger.warning("Schedule not found: %s", schedule_name)
-            return None
+        self._logger.warning("Schedule not found: %s", schedule_name)
+        return None
 
     def _get_temperature(self, presets: list, target: str) -> str:
         self._logger.debug("Getting temperature preset: %s", target)
@@ -207,7 +222,7 @@ class ThermostatDataGenerator():
         payload = {
             "xhr": "1",
             "device": device_id,
-            "page": "home_auto_hkr_edit"
+            "page": "home_auto_hkr_edit",
         }
         response = self._fritz_requests.post_req(payload, "data.lua")
         regex = r'(?<=<input type="hidden" name="Holidaytemp" value=")\d+\.?\d?(?=" id="uiNum:Holidaytemp">)'
@@ -225,47 +240,48 @@ class ThermostatDataGenerator():
         return -1
 
     def _generate_weekly_timers(self, raw_timers: dict) -> dict:
-        """
-        Week Binary Conversion (reversed)
-        Mo Tu We Th Fr Sa Su
-        1  1  1  1  1  1  1  = 127
-        1  0  0  0  0  1  0  = 33
-        0  0  1  1  0  1  0  = 44
+        """Convert weekly timer actions to Fritz!Box timer format.
 
-        timer_item_x=${TIME};${STATE};${DAYS}
-        timer_item_0=  0530 ;    1   ; 127
-        This means turn the device on at 5:30 on all days of the week
-        """
+        Week Binary Conversion (reversed)::
 
+            Mo Tu We Th Fr Sa Su
+            1  1  1  1  1  1  1  = 127
+            1  0  0  0  0  1  0  = 33
+            0  0  1  1  0  1  0  = 44
+
+            timer_item_x=${TIME};${STATE};${DAYS}
+            timer_item_0=  0530 ;    1   ; 127
+            This means turn the device on at 5:30 on all days of the week
+        """
         self._logger.debug("Generating weekly timers for raw timers: %s", raw_timers)
 
         weekly_timers = {}
         # day - bitmask mapping
         day_to_bit = {
-            'MON': 1 << 0,   # Monday -> 1
-            'TUE': 1 << 1,   # Tuesday -> 2
-            'WED': 1 << 2,   # Wednesday -> 4
-            'THU': 1 << 3,   # Thursday -> 8
-            'FRI': 1 << 4,   # Friday -> 16
-            'SAT': 1 << 5,   # Saturday -> 32
-            'SUN': 1 << 6    # Sunday -> 64
+            "MON": 1 << 0,   # Monday -> 1
+            "TUE": 1 << 1,   # Tuesday -> 2
+            "WED": 1 << 2,   # Wednesday -> 4
+            "THU": 1 << 3,   # Thursday -> 8
+            "FRI": 1 << 4,   # Friday -> 16
+            "SAT": 1 << 5,   # Saturday -> 32
+            "SUN": 1 << 6,    # Sunday -> 64
         }
 
         # action states mapping
         set_action = {
-            'UPPER_TEMPERATURE': 1,
-            'LOWER_TEMPERATURE': 0,
-            'SET_OFF': 0
+            "UPPER_TEMPERATURE": 1,
+            "LOWER_TEMPERATURE": 0,
+            "SET_OFF": 0,
         }
         combined_times = {}
-        for action in raw_timers['actions']:
-            day = action['timeSetting']['dayOfWeek']
-            start_time = action['timeSetting']['startTime']
+        for action in raw_timers["actions"]:
+            day = action["timeSetting"]["dayOfWeek"]
+            start_time = action["timeSetting"]["startTime"]
 
-            if 'presetTemperature' in action['description']:
-                state = action['description']['presetTemperature']['name']
-            elif action['description']['action'] == 'SET_OFF':
-                state = 'SET_OFF'
+            if "presetTemperature" in action["description"]:
+                state = action["description"]["presetTemperature"]["name"]
+            elif action["description"]["action"] == "SET_OFF":
+                state = "SET_OFF"
             else:
                 err = "Error: state not found!"
                 self._logger.exception(err)
@@ -275,7 +291,7 @@ class ThermostatDataGenerator():
             if day in day_to_bit:
                 bitmask = day_to_bit[day]
                 category = set_action[state]
-                time_str = start_time.replace(':', '')[:4]  # Format time to HHMM
+                time_str = start_time.replace(":", "")[:4]  # Format time to HHMM
                 key = (time_str, category)
 
                 # Initialize bitmask if not present
@@ -294,7 +310,7 @@ class ThermostatDataGenerator():
         self._logger.info("Weekly timers generation complete")
         return weekly_timers
 
-    def _generate_holiday_schedule(self, raw_holidays: dict, device_id) -> dict:
+    def _generate_holiday_schedule(self, raw_holidays: dict, device_id: int) -> dict:
         self._logger.debug("Generating holiday schedule for device %s", device_id)
 
         holiday_schedule = {}
@@ -344,7 +360,8 @@ class ThermostatDataGenerator():
         return summer_time_schedule
 
 
-    def generate(self, raw_device_data) -> dict:
+    def generate(self, raw_device_data: dict) -> dict:
+        """Generate thermostat data from raw Fritz!Box device data."""
         self._logger.debug("Starting to generate thermostat data for raw device data: %s", raw_device_data)
 
         thermostat_data = {}
@@ -381,9 +398,9 @@ class ThermostatDataGenerator():
 
                 if not grouped:
                     adaptiv_heating = self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "adaptivHeating")
-                    thermostat_data[name]["hkr_adaptheat"] = "1" if (adaptiv_heating['isEnabled'] and adaptiv_heating['supported']) else "0"
+                    thermostat_data[name]["hkr_adaptheat"] = "1" if (adaptiv_heating["isEnabled"] and adaptiv_heating["supported"]) else "0"
                     self._logger.debug("Adaptive heating for %s: %s", name, thermostat_data[name]["hkr_adaptheat"])
-                    thermostat_data[name]['graphState'] = "1"
+                    thermostat_data[name]["graphState"] = "1"
                     temperatures = self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "presets")
                     thermostat_data[name]["Absenktemp"] = self._get_temperature(temperatures, "LOWER_TEMPERATURE")
                     thermostat_data[name]["Heiztemp"] = self._get_temperature(temperatures, "UPPER_TEMPERATURE")

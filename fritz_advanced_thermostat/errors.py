@@ -1,3 +1,6 @@
+"""Custom exceptions for FritzAdvancedThermostat."""
+
+
 class FritzAdvancedThermostatExecutionError(Exception):
     """Unknown error while executing."""
 

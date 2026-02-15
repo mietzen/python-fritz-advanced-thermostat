@@ -1,12 +1,11 @@
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from urllib.parse import quote
 
 import pytest
 
 from fritz_advanced_thermostat import FritzAdvancedThermostat
-
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
