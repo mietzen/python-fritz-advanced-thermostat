@@ -51,7 +51,7 @@ class FritzConnection:
         """Send a POST request to the Fritz!Box."""
         url = f"{self._prefixed_host}/{site}"
         payload = {"sid": self._sid} | payload
-        self._logger.info("Sending POST request to %s", url)
+        self._logger.debug("Sending POST request to %s", url)
         self._logger.debug("Payload: %s", payload)
 
         data_pkg = []
@@ -77,7 +77,7 @@ class FritzConnection:
                     verify=self._ssl_verify,
                     timeout=self._timeout,
                 )
-                self._logger.info("Request successful on attempt %s", retries + 1)
+                self._logger.debug("Request successful on attempt %s", retries + 1)
                 break
             except requests.ConnectionError as e:
                 self._logger.warning("Connection Error on attempt %s: %s", retries + 1, e)
@@ -86,7 +86,7 @@ class FritzConnection:
                     err = f"Tried {self._max_retries} times, Connection Error on loading raw thermostat data"
                     self._logger.exception(err)
                     raise FritzAdvancedThermostatConnectionError(err) from e
-                self._logger.info("Retrying request, attempt %s of %s", retries + 1, self._max_retries)
+                self._logger.debug("Retrying request, attempt %s of %s", retries + 1, self._max_retries)
         if not response:
             err = "Error: Empty response!"
             self._logger.error("Request failed: %s", err)
@@ -218,7 +218,7 @@ class ThermostatDataGenerator:
 
     def _get_holiday_temp(self, device_id: int) -> str:
         # I found no other way then to parse the HTML with a regex, I don't know where I can find this.
-        self._logger.info("Getting holiday temperature for device ID: %s", device_id)
+        self._logger.debug("Getting holiday temperature for device ID: %s", device_id)
         payload = {
             "xhr": "1",
             "device": device_id,
@@ -307,7 +307,7 @@ class ThermostatDataGenerator:
             weekly_timers[f"timer_item_{i}"] = f"{time_str};{category};{bitmask}"
             self._logger.debug("Generated weekly timer: timer_item_%s = %s", i, weekly_timers[f"timer_item_{i}"])
 
-        self._logger.info("Weekly timers generation complete")
+        self._logger.debug("Weekly timers generation complete")
         return weekly_timers
 
     def _generate_holiday_schedule(self, raw_holidays: dict, device_id: int) -> dict:
@@ -337,7 +337,7 @@ class ThermostatDataGenerator:
             holiday_schedule["Holidaytemp"] = self._get_holiday_temp(device_id)
             self._logger.debug("Holiday temperature for device %s: %s", device_id, holiday_schedule["Holidaytemp"])
 
-        self._logger.info("Holiday schedule generation complete for device %s", device_id)
+        self._logger.debug("Holiday schedule generation complete for device %s", device_id)
         return holiday_schedule
 
 
@@ -354,9 +354,9 @@ class ThermostatDataGenerator:
             self._logger.debug("Summer time schedule generated: %s", summer_time_schedule)
         else:
             summer_time_schedule["SummerEnabled"] = "0"
-            self._logger.info("Summer time schedule is not enabled")
+            self._logger.debug("Summer time schedule is not enabled")
 
-        self._logger.info("Summer time schedule generation complete")
+        self._logger.debug("Summer time schedule generation complete")
         return summer_time_schedule
 
 
@@ -422,5 +422,5 @@ class ThermostatDataGenerator:
                         thermostat_data[name] |= self._generate_weekly_timers(raw_weekly_timetable)
                         self._logger.debug("Weekly timers for %s generated", name)
 
-        self._logger.info("Thermostat data generation complete")
+        self._logger.debug("Thermostat data generation complete")
         return thermostat_data

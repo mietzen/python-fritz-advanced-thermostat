@@ -66,7 +66,6 @@ class FritzAdvancedThermostat:
         password (str): The password for Fritz!Box authentication.
         ssl_verify (bool, optional): Whether to verify SSL certificates during HTTP requests. Defaults to False.
         experimental (bool, optional): Enables experimental mode with disabled checks for unsupported features. Defaults to False.
-        log_level (str, optional): The logging level for internal logging. Defaults to "warning".
         timeout (int, optional): The timeout for HTTP requests in seconds. Defaults to 60.
         retries (int, optional): Number of retry attempts for failed HTTP requests. Defaults to 3.
 
@@ -113,14 +112,13 @@ class FritzAdvancedThermostat:
             host (str): The IP address or URL of the Fritz!Box.
             user (str): The username for Fritz!Box authentication.
             password (str): The password for Fritz!Box authentication.
-            log_level (str, optional): The logging level for internal logging. Defaults to "warning".
             timeout (int, optional): The timeout for HTTP requests in seconds. Defaults to 60.
             retries (int, optional): Number of retry attempts for failed HTTP requests. Defaults to 3.
             ssl_verify (bool): Whether to verify SSL certificates during HTTP requests.
             experimental (bool): Enables experimental mode with disabled checks for unsupported features.
 
         Raises:
-            FritzAdvancedThermostatExecutionError: If the Python version is less than 3.9.0.
+            FritzAdvancedThermostatExecutionError: If the Python version is less than 3.12.0.
             FritzAdvancedThermostatConnectionError: If login or HTTP requests fail.
             FritzAdvancedThermostatCompatibilityError: If the Fritz!OS version is unsupported.
             FritzAdvancedThermostatKeyError: If trying to set a thermostat value with an unsupported key.
