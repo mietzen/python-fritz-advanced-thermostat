@@ -18,7 +18,7 @@ Usage:
     thermostat.commit()
 
 Note:
-    This module requires Python 3.9.0 or later.
+    This module requires Python 3.12.0 or later.
 
 Raises:
     FritzAdvancedThermostatExecutionError: For general execution errors.
@@ -38,12 +38,11 @@ import json
 import logging
 import re
 import sys
-from urllib.parse import quote
 
 from packaging import version
 
-from utils import FritzConnection, ThermostatDataGenerator
-from errors import FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatKeyError
+from .utils import FritzConnection, ThermostatDataGenerator
+from .errors import FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatConnectionError, FritzAdvancedThermostatError, FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatKeyError
 
 
 PYTHON_VERSION = ".".join([str(x) for x in sys.version_info[0:3]])
@@ -123,13 +122,13 @@ class FritzAdvancedThermostat:
         if experimental:
             self._logger.warning("Experimental mode! All checks disabled!")
 
-        if version.parse(PYTHON_VERSION) < version.parse("3.9.0"):
+        if version.parse(PYTHON_VERSION) < version.parse("3.12.0"):
             err = "Error: Update Python!\nPython version: " + PYTHON_VERSION + \
-            "\nMin. required Python version: 3.9.0"
+            "\nMin. required Python version: 3.12.0"
             self._logger.error(err)
             raise FritzAdvancedThermostatExecutionError(err)
 
-        self._supported_firmware = ["7.29", "7.30", "7.31", "7.56", "7.57"]
+        self._supported_firmware = ["7.60"]
         # Set basic properties
         self._experimental = experimental
         self._ssl_verify = ssl_verify
@@ -159,7 +158,7 @@ class FritzAdvancedThermostat:
             ),
         }
 
-        self._supported_thermostats = ["FRITZ!DECT 301"]
+        self._supported_thermostats = ["FRITZ!Smart Thermo 301"]
         self._prefixed_host = host if re.match(
             r"^https?://", host) else "https://" + host
 
@@ -240,12 +239,12 @@ class FritzAdvancedThermostat:
         self._load_raw_device_data()
         return [device["id"] for device in self._raw_device_data["devices"] if device["displayName"] == device_name][0]
 
-    def _generate_data_pkg(self, device_name: str, dry_run: bool = False) -> str:
+    def _generate_data_pkg(self, device_name: str) -> dict:
         self._generate_thermostat_data()
         data_dict = {
             "device": self._get_device_id_by_name(device_name),
             "view": None,
-            "back_to_page": "sh_dev",
+            "back_to_page": "/smarthome/devices.lua",
             "ule_device_name": device_name,
             "tempsensor": "own",
             "ExtTempsensorID": "tochoose",
@@ -253,30 +252,13 @@ class FritzAdvancedThermostat:
 
         data_dict |= self._thermostat_data[device_name]
 
-        if dry_run:
-            data_dict |= {
-                "validate": "apply",
-                "xhr": "1",
-                "useajax": "1",
-            }
-        else:
-            data_dict |= {
-                "xhr": "1",
-                "lang": "de",
-                "apply": None,
-                "oldpage": "/net/home_auto_hkr_edit.lua",
-            }
+        data_dict |= {
+            "xhr": "1",
+            "lang": "de",
+            "apply": None
+        }
 
-        data_pkg = []
-        for key, value in data_dict.items():
-            if value is None:
-                data_pkg.append(key + "=")
-            elif isinstance(value, bool):
-                if value:
-                    data_pkg.append(key + "=on")
-            elif value:
-                data_pkg.append(key + "=" + quote(str(value), safe=""))
-        return "&".join(data_pkg)
+        return data_dict
 
     def commit(self) -> None:
         """Commit the changes to the thermostats by sending the updated data to the FRITZ!Box.
@@ -293,44 +275,14 @@ class FritzAdvancedThermostat:
         """
         while self._changed_devices:
             thermostat_name = self._changed_devices.pop()
-            # Dry run option is not available in 7.57 ???
-            if version.parse("7.0") < version.parse(self._fritzos) <= version.parse("7.31"):
-                site = "net/home_auto_hkr_edit.lua"
-                payload = self._generate_data_pkg(
-                    thermostat_name, dry_run=True)
-                dry_run_response = self._fritz_conn.post_req(payload, site)
-                try:
-                    dry_run_check = json.loads(dry_run_response)
-                    if not dry_run_check["ok"]:
-                        err = "Error in: " + \
-                            ",".join(dry_run_check["tomark"])
-                        err += "\n" + dry_run_check["alert"]
-                        self._logger.error(err)
-                        raise FritzAdvancedThermostatExecutionError(err)
-                except json.decoder.JSONDecodeError as e:
-                    if dry_run_response:
-                        err = "Error: Something went wrong on setting the thermostat values"
-                        err += "\n" + dry_run_response.text
-                    else:
-                        err = "Error: Something went wrong on dry run"
-                        err += "\n" + dry_run_response.text
-                    self._logger.exception(err)
-                    raise FritzAdvancedThermostatExecutionError(
-                        err) from e
 
-            payload = self._generate_data_pkg(thermostat_name, dry_run=False)
+            payload = self._generate_data_pkg(thermostat_name)
             response = self._fritz_conn.post_req(payload, "data.lua")
             try:
                 check = json.loads(response)
-                if version.parse("7.0") < version.parse(self._fritzos) <= version.parse("7.31") and check["pid"] != "sh_dev":
+                if check["data"]["apply"] != "ok":
                     err = "Error: Something went wrong setting the thermostat values"
-                    err = "\n" + response.text
-                    self._logger.error(err)
-                    raise FritzAdvancedThermostatExecutionError(
-                        err)
-                if version.parse("7.50") < version.parse(self._fritzos) <= version.parse("7.57") and check["data"]["apply"] != "ok":
-                    err = "Error: Something went wrong setting the thermostat values"
-                    err = "\n" + response.text
+                    err = "\n" + response
                     self._logger.error(err)
                     raise FritzAdvancedThermostatExecutionError(
                         err)
@@ -339,7 +291,7 @@ class FritzAdvancedThermostat:
                 self._logger.exception(err)
                 raise FritzAdvancedThermostatExecutionError(err) from e
 
-    def set_thermostat_offset(self, device_name: str, offset: str | int) -> None:
+    def set_thermostat_offset(self, device_name: str, offset: str | float) -> None:
         """Set the temperature offset for a specified thermostat device.
 
         This method allows setting a temperature offset for the given thermostat device.
@@ -348,8 +300,8 @@ class FritzAdvancedThermostat:
 
         Args:
             device_name (str): The name of the thermostat device.
-            offset (str | int): The desired temperature offset, either as a string or integer.
-                                It must be in 0.5°C increments. If not, it will be rounded.
+            offset (str | float): The desired temperature offset, either as a string or float.
+                                  It must be in 0.5°C increments. If not, it will be rounded.
 
         Raises:
             FritzAdvancedThermostatExecutionError: If the provided device name is invalid.
@@ -357,7 +309,7 @@ class FritzAdvancedThermostat:
         """
         self._check_device_name(device_name)
         if not (float(offset) * 2).is_integer():
-            offset = round(offset * 2) / 2
+            offset = round(float(offset) * 2) / 2
             self._logger.warning(
                 "Offset must be entered in 0.5 steps! Your offset was rounded to: %s", "{offset!s}")
         self._set_thermostat_values(device_name, Offset=str(offset))

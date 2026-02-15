@@ -1,0 +1,531 @@
+{
+    "groups": [
+        {
+            "type": "SmartHomeGroup",
+            "category": "THERMOSTAT",
+            "id": 900,
+            "units": [
+                {
+                    "type": "THERMOSTAT",
+                    "assignedGroup": {
+                        "id": 900,
+                        "displayName": "Living Room"
+                    },
+                    "id": 900,
+                    "skills": [
+                        {
+                            "type": "SmartHomeThermostat",
+                            "presets": [
+                                {"name": "LOWER_TEMPERATURE", "temperature": 17},
+                                {"name": "UPPER_TEMPERATURE", "temperature": 21.5}
+                            ],
+                            "temperatureDropDetection": {
+                                "doNotHeatOffsetInMinutes": 128,
+                                "sensitivity": 125
+                            },
+                            "timeControl": {
+                                "isEnabled": true,
+                                "timeSchedules": []
+                            },
+                            "adaptivHeating": {
+                                "isEnabled": true,
+                                "supported": true,
+                                "active": false
+                            }
+                        }
+                    ],
+                    "interactionControls": [
+                        {"devControlName": "BUTTON", "isLocked": false},
+                        {"devControlName": "EXTERNAL", "isLocked": false}
+                    ],
+                    "displayName": "Living Room"
+                }
+            ],
+            "members": [
+                {
+                    "id": 16,
+                    "type": "THERMOSTAT",
+                    "device": {"id": 16, "category": "THERMOSTAT", "displayName": "Living Room West"},
+                    "displayName": "Living Room West"
+                },
+                {
+                    "id": 19,
+                    "type": "THERMOSTAT",
+                    "device": {"id": 19, "category": "THERMOSTAT", "displayName": "Living Room North"},
+                    "displayName": "Living Room North"
+                }
+            ],
+            "displayName": "Living Room"
+        }
+    ],
+    "devices": [
+        {
+            "id": 16,
+            "type": "SmartHomeDevice",
+            "displayName": "Living Room West",
+            "category": "THERMOSTAT",
+            "units": [
+                {
+                    "type": "THERMOSTAT",
+                    "assignedGroup": {"id": 900, "displayName": "Living Room"},
+                    "id": 16,
+                    "skills": [
+                        {
+                            "type": "SmartHomeThermostat",
+                            "presets": [
+                                {"name": "LOWER_TEMPERATURE", "temperature": 17},
+                                {"name": "UPPER_TEMPERATURE", "temperature": 21.5}
+                            ],
+                            "temperatureDropDetection": {
+                                "doNotHeatOffsetInMinutes": 10,
+                                "sensitivity": 5
+                            },
+                            "timeControl": {
+                                "isEnabled": true,
+                                "timeSchedules": [
+                                    {
+                                        "isEnabled": true,
+                                        "kind": "REPETITIVE",
+                                        "name": "HOLIDAYS",
+                                        "actions": [
+                                            {
+                                                "isEnabled": true,
+                                                "timeSetting": {
+                                                    "startDate": "2019-05-01",
+                                                    "endTime": "23:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-05-20"
+                                                },
+                                                "description": []
+                                            },
+                                            {
+                                                "isEnabled": false,
+                                                "timeSetting": {
+                                                    "startDate": "2019-01-01",
+                                                    "endTime": "00:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-01-01"
+                                                },
+                                                "description": {
+                                                    "action": "SET_TEMPERATURE",
+                                                    "presetTemperature": {"name": "HOLIDAY_TEMPERATURE"}
+                                                }
+                                            },
+                                            {
+                                                "isEnabled": false,
+                                                "timeSetting": {
+                                                    "startDate": "2019-01-01",
+                                                    "endTime": "00:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-01-01"
+                                                },
+                                                "description": {
+                                                    "action": "SET_TEMPERATURE",
+                                                    "presetTemperature": {"name": "HOLIDAY_TEMPERATURE"}
+                                                }
+                                            },
+                                            {
+                                                "isEnabled": false,
+                                                "timeSetting": {
+                                                    "startDate": "2019-01-01",
+                                                    "endTime": "00:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-01-01"
+                                                },
+                                                "description": {
+                                                    "action": "SET_TEMPERATURE",
+                                                    "presetTemperature": {"name": "HOLIDAY_TEMPERATURE"}
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "isEnabled": true,
+                                        "kind": "REPETITIVE",
+                                        "name": "SUMMER_TIME",
+                                        "actions": [
+                                            {
+                                                "isEnabled": true,
+                                                "timeSetting": {
+                                                    "startDate": "2019-05-21",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-09-10"
+                                                },
+                                                "description": {"action": "SET_OFF"}
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "isEnabled": true,
+                                        "kind": "WEEKLY_TIMETABLE",
+                                        "name": "TEMPERATURE",
+                                        "actions": [
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SUN", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SUN", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "MON", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "MON", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "TUE", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "TUE", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "WED", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "WED", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "THU", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "THU", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "FRI", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "FRI", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SAT", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SAT", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}}
+                                        ]
+                                    }
+                                ]
+                            },
+                            "adaptivHeating": {
+                                "isEnabled": true,
+                                "supported": true,
+                                "active": false
+                            },
+                            "usedTempSensor": {
+                                "type": "TEMPERATURE_SENSOR",
+                                "assignedGroup": {"id": 900, "displayName": "Living Room"},
+                                "id": 16,
+                                "skills": [
+                                    {"offset": -3.5, "type": "SmartHomeTemperatureSensor", "currentInCelsius": 21}
+                                ],
+                                "displayName": "Living Room West"
+                            }
+                        }
+                    ],
+                    "interactionControls": [
+                        {"devControlName": "BUTTON", "isLocked": false},
+                        {"devControlName": "EXTERNAL", "isLocked": false}
+                    ],
+                    "displayName": "Living Room West"
+                },
+                {
+                    "type": "TEMPERATURE_SENSOR",
+                    "assignedGroup": {"id": 900, "displayName": "Living Room"},
+                    "id": 16,
+                    "skills": [
+                        {"offset": -3.5, "type": "SmartHomeTemperatureSensor", "currentInCelsius": 21}
+                    ],
+                    "displayName": "Living Room West"
+                }
+            ]
+        },
+        {
+            "id": 19,
+            "type": "SmartHomeDevice",
+            "displayName": "Living Room North",
+            "category": "THERMOSTAT",
+            "units": [
+                {
+                    "type": "THERMOSTAT",
+                    "assignedGroup": {"id": 900, "displayName": "Living Room"},
+                    "id": 19,
+                    "skills": [
+                        {
+                            "type": "SmartHomeThermostat",
+                            "presets": [
+                                {"name": "LOWER_TEMPERATURE", "temperature": 17},
+                                {"name": "UPPER_TEMPERATURE", "temperature": 21.5}
+                            ],
+                            "temperatureDropDetection": {
+                                "doNotHeatOffsetInMinutes": 10,
+                                "sensitivity": 5
+                            },
+                            "timeControl": {
+                                "isEnabled": true,
+                                "timeSchedules": [
+                                    {
+                                        "isEnabled": true,
+                                        "kind": "REPETITIVE",
+                                        "name": "HOLIDAYS",
+                                        "actions": [
+                                            {
+                                                "isEnabled": true,
+                                                "timeSetting": {
+                                                    "startDate": "2019-05-01",
+                                                    "endTime": "23:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-05-20"
+                                                },
+                                                "description": []
+                                            },
+                                            {
+                                                "isEnabled": false,
+                                                "timeSetting": {
+                                                    "startDate": "2019-01-01",
+                                                    "endTime": "00:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-01-01"
+                                                },
+                                                "description": {
+                                                    "action": "SET_TEMPERATURE",
+                                                    "presetTemperature": {"name": "HOLIDAY_TEMPERATURE"}
+                                                }
+                                            },
+                                            {
+                                                "isEnabled": false,
+                                                "timeSetting": {
+                                                    "startDate": "2019-01-01",
+                                                    "endTime": "00:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-01-01"
+                                                },
+                                                "description": {
+                                                    "action": "SET_TEMPERATURE",
+                                                    "presetTemperature": {"name": "HOLIDAY_TEMPERATURE"}
+                                                }
+                                            },
+                                            {
+                                                "isEnabled": false,
+                                                "timeSetting": {
+                                                    "startDate": "2019-01-01",
+                                                    "endTime": "00:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-01-01"
+                                                },
+                                                "description": {
+                                                    "action": "SET_TEMPERATURE",
+                                                    "presetTemperature": {"name": "HOLIDAY_TEMPERATURE"}
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "isEnabled": true,
+                                        "kind": "REPETITIVE",
+                                        "name": "SUMMER_TIME",
+                                        "actions": [
+                                            {
+                                                "isEnabled": true,
+                                                "timeSetting": {
+                                                    "startDate": "2019-05-21",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-09-10"
+                                                },
+                                                "description": {"action": "SET_OFF"}
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "isEnabled": true,
+                                        "kind": "WEEKLY_TIMETABLE",
+                                        "name": "TEMPERATURE",
+                                        "actions": [
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SUN", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SUN", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "MON", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "MON", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "TUE", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "TUE", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "WED", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "WED", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "THU", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "THU", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "FRI", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "FRI", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SAT", "startTime": "04:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 21.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SAT", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17}}}
+                                        ]
+                                    }
+                                ]
+                            },
+                            "adaptivHeating": {
+                                "isEnabled": true,
+                                "supported": true,
+                                "active": false
+                            },
+                            "usedTempSensor": {
+                                "type": "TEMPERATURE_SENSOR",
+                                "assignedGroup": {"id": 900, "displayName": "Living Room"},
+                                "id": 19,
+                                "skills": [
+                                    {"offset": -1, "type": "SmartHomeTemperatureSensor", "currentInCelsius": 21.5}
+                                ],
+                                "displayName": "Living Room North"
+                            }
+                        }
+                    ],
+                    "interactionControls": [
+                        {"devControlName": "BUTTON", "isLocked": false},
+                        {"devControlName": "EXTERNAL", "isLocked": false}
+                    ],
+                    "displayName": "Living Room North"
+                },
+                {
+                    "type": "TEMPERATURE_SENSOR",
+                    "assignedGroup": {"id": 900, "displayName": "Living Room"},
+                    "id": 19,
+                    "skills": [
+                        {"offset": -1, "type": "SmartHomeTemperatureSensor", "currentInCelsius": 21.5}
+                    ],
+                    "displayName": "Living Room North"
+                }
+            ]
+        },
+        {
+            "id": 20,
+            "type": "SmartHomeDevice",
+            "displayName": "Kitchen",
+            "category": "THERMOSTAT",
+            "units": [
+                {
+                    "type": "THERMOSTAT",
+                    "id": 20,
+                    "skills": [
+                        {
+                            "type": "SmartHomeThermostat",
+                            "presets": [
+                                {"name": "LOWER_TEMPERATURE", "temperature": 17.5},
+                                {"name": "UPPER_TEMPERATURE", "temperature": 20.5}
+                            ],
+                            "temperatureDropDetection": {
+                                "doNotHeatOffsetInMinutes": 30,
+                                "sensitivity": 5
+                            },
+                            "timeControl": {
+                                "isEnabled": true,
+                                "timeSchedules": [
+                                    {
+                                        "isEnabled": false,
+                                        "kind": "REPETITIVE",
+                                        "name": "HOLIDAYS",
+                                        "actions": [
+                                            {
+                                                "isEnabled": false,
+                                                "timeSetting": {
+                                                    "startDate": "2019-02-15",
+                                                    "endTime": "00:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-03-01"
+                                                },
+                                                "description": {
+                                                    "action": "SET_TEMPERATURE",
+                                                    "presetTemperature": {"name": "HOLIDAY_TEMPERATURE"}
+                                                }
+                                            },
+                                            {
+                                                "isEnabled": false,
+                                                "timeSetting": {
+                                                    "startDate": "2019-02-15",
+                                                    "endTime": "00:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-03-01"
+                                                },
+                                                "description": {
+                                                    "action": "SET_TEMPERATURE",
+                                                    "presetTemperature": {"name": "HOLIDAY_TEMPERATURE"}
+                                                }
+                                            },
+                                            {
+                                                "isEnabled": false,
+                                                "timeSetting": {
+                                                    "startDate": "2019-02-15",
+                                                    "endTime": "00:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-03-01"
+                                                },
+                                                "description": {
+                                                    "action": "SET_TEMPERATURE",
+                                                    "presetTemperature": {"name": "HOLIDAY_TEMPERATURE"}
+                                                }
+                                            },
+                                            {
+                                                "isEnabled": false,
+                                                "timeSetting": {
+                                                    "startDate": "2019-02-15",
+                                                    "endTime": "00:00:00",
+                                                    "startTime": "00:00:00",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-03-01"
+                                                },
+                                                "description": {
+                                                    "action": "SET_TEMPERATURE",
+                                                    "presetTemperature": {"name": "HOLIDAY_TEMPERATURE"}
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "isEnabled": true,
+                                        "kind": "REPETITIVE",
+                                        "name": "SUMMER_TIME",
+                                        "actions": [
+                                            {
+                                                "isEnabled": true,
+                                                "timeSetting": {
+                                                    "startDate": "2019-05-21",
+                                                    "repetition": "YEARLY",
+                                                    "endDate": "2019-09-10"
+                                                },
+                                                "description": {"action": "SET_OFF"}
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "isEnabled": true,
+                                        "kind": "WEEKLY_TIMETABLE",
+                                        "name": "TEMPERATURE",
+                                        "actions": [
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SUN", "startTime": "05:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 20.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SUN", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "MON", "startTime": "05:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 20.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "MON", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "TUE", "startTime": "05:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 20.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "TUE", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "WED", "startTime": "05:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 20.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "WED", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "THU", "startTime": "05:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 20.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "THU", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "FRI", "startTime": "05:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 20.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "FRI", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SAT", "startTime": "05:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "UPPER_TEMPERATURE", "temperature": 20.5}}},
+                                            {"isEnabled": true, "timeSetting": {"dayOfWeek": "SAT", "startTime": "22:00:00"}, "description": {"action": "SET_TEMPERATURE", "presetTemperature": {"name": "LOWER_TEMPERATURE", "temperature": 17.5}}}
+                                        ]
+                                    }
+                                ]
+                            },
+                            "adaptivHeating": {
+                                "isEnabled": true,
+                                "supported": true,
+                                "active": false
+                            },
+                            "usedTempSensor": {
+                                "type": "TEMPERATURE_SENSOR",
+                                "id": 20,
+                                "skills": [
+                                    {"offset": -4, "type": "SmartHomeTemperatureSensor", "currentInCelsius": 21.5}
+                                ],
+                                "displayName": "Kitchen"
+                            }
+                        }
+                    ],
+                    "interactionControls": [
+                        {"devControlName": "BUTTON", "isLocked": false},
+                        {"devControlName": "EXTERNAL", "isLocked": false}
+                    ],
+                    "displayName": "Kitchen"
+                },
+                {
+                    "type": "TEMPERATURE_SENSOR",
+                    "id": 20,
+                    "skills": [
+                        {"offset": -4, "type": "SmartHomeTemperatureSensor", "currentInCelsius": 21.5}
+                    ],
+                    "displayName": "Kitchen"
+                }
+            ]
+        }
+    ]
+}

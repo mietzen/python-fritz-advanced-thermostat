@@ -2,9 +2,10 @@ import logging
 import requests
 import xml.etree.ElementTree as ET
 import hashlib
-
+import re
+from urllib.parse import quote
 import json
-from errors import FritzAdvancedThermostatConnectionError, FritzAdvancedThermostatExecutionError
+from .errors import FritzAdvancedThermostatConnectionError, FritzAdvancedThermostatExecutionError
 
 import urllib3
 # Silence annoying urllib3 Unverified HTTPS warnings, even so if we have checked verify ssl false in requests
@@ -36,11 +37,23 @@ class FritzConnection():
         self._logger.debug("Headers generated: %s", headers)
         return headers
 
-    def post_req(self, payload: dict, site: str) -> dict:
+    def post_req(self, payload: dict, site: str) -> str:
         url = f"{self._prefixed_host}/{site}"
         payload = {"sid": self._sid} | payload
         self._logger.info("Sending POST request to %s", url)
         self._logger.debug("Payload: %s", payload)
+
+        data_pkg = []
+        for key, value in payload.items():
+            if value is None:
+                data_pkg.append(key + "=")
+            elif isinstance(value, bool):
+                if value:
+                    data_pkg.append(key + "=on")
+            elif value:
+                data_pkg.append(key + "=" + quote(str(value), safe=""))
+
+        response = None
 
         retries = 0
         while retries <= self._max_retries:
@@ -49,7 +62,7 @@ class FritzConnection():
                 response = requests.post(
                     url,
                     headers=self._generate_headers(payload),
-                    data=payload,
+                    data="&".join(data_pkg),
                     verify=self._ssl_verify,
                     timeout=self._timeout
                 )
@@ -63,6 +76,10 @@ class FritzConnection():
                     self._logger.error(err)
                     raise FritzAdvancedThermostatConnectionError(err) from e
                 self._logger.info("Retrying request, attempt %s of %s", retries + 1, self._max_retries)
+        if not response:
+            err = "Error: Empty response!"
+            self._logger.error("Request failed: %s", err)
+            raise FritzAdvancedThermostatConnectionError(err)
 
         self._logger.debug("Received response with status code: %s", response.status_code)
 
@@ -74,7 +91,7 @@ class FritzConnection():
         self._logger.debug("Response received: %s", response.text)
         return response.text
 
-    def login(self, user: str, password: str) -> str:
+    def login(self, user: str, password: str) -> None:
         url = "/".join([self._prefixed_host, f"login_sid.lua?version=2&user={user}"])
         response = requests.get(
             url, verify=self._ssl_verify, timeout=self._timeout)
@@ -83,7 +100,7 @@ class FritzConnection():
         sid = xml_root.findtext("SID")
 
         if sid == "0000000000000000":
-            challenge_parts = xml_root.findtext("Challenge").split("$")
+            challenge_parts = str(xml_root.findtext("Challenge")).split("$")
             iter1 = int(challenge_parts[1])
             salt1 = bytes.fromhex(challenge_parts[2])
             iter2 = int(challenge_parts[3])
@@ -249,6 +266,10 @@ class ThermostatDataGenerator():
                 state = action['description']['presetTemperature']['name']
             elif action['description']['action'] == 'SET_OFF':
                 state = 'SET_OFF'
+            else:
+                err = "Error: state not found!"
+                self._logger.exception(err)
+                raise FritzAdvancedThermostatExecutionError(err)
 
             # Get bitmask and category for the action
             if day in day_to_bit:
@@ -267,7 +288,7 @@ class ThermostatDataGenerator():
         sorted_times = sorted(combined_times.items(), key=lambda x: (self._first_day_in_bitmask(x[1]), x[0][0]))
 
         for i, ((time_str, category), bitmask) in enumerate(sorted_times):
-            weekly_timers[f"timer_item_{i}"] = "{time_str};{category};{bitmask}"
+            weekly_timers[f"timer_item_{i}"] = f"{time_str};{category};{bitmask}"
             self._logger.debug("Generated weekly timer: timer_item_%s = %s", i, weekly_timers[f"timer_item_{i}"])
 
         self._logger.info("Weekly timers generation complete")
@@ -277,26 +298,28 @@ class ThermostatDataGenerator():
         self._logger.debug("Generating holiday schedule for device %s", device_id)
 
         holiday_schedule = {}
-        if raw_holidays["isEnabled"]:
-            holiday_id_count = 0
-            for i, holiday in enumerate(raw_holidays["actions"], 1):
+        holiday_id_count = 0
+        actions = raw_holidays.get("actions", [])
+
+        for i in range(1, 5):  # Always output all 4 holiday slots
+            if i <= len(actions):
+                holiday = actions[i - 1]
                 if holiday["isEnabled"]:
                     holiday_id_count += 1
-                    holiday_schedule[f"Holiday{i}Enabled"] = "1"
-                    holiday_schedule[f"Holiday{holiday_id_count!s}ID"] = holiday_id_count
-                    holiday_schedule[f"Holiday{i}EndDay"] = str(int(holiday["timeSetting"]["endDate"].split("-")[2]))
-                    holiday_schedule[f"Holiday{i}EndHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
-                    holiday_schedule[f"Holiday{i}EndMonth"] = str(int(holiday["timeSetting"]["endDate"].split("-")[1]))
-                    holiday_schedule[f"Holiday{i}StartDay"] = str(int(holiday["timeSetting"]["startDate"].split("-")[2]))
-                    holiday_schedule[f"Holiday{i}StartHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[1]))
-                    holiday_schedule[f"Holiday{i}StartMonth"] = str(int(holiday["timeSetting"]["startDate"].split("-")[1]))
-                    self._logger.debug("Holiday schedule %s generated: %s", i, holiday_schedule)
+                holiday_schedule[f"Holiday{i}Enabled"] = "1" if holiday["isEnabled"] else "0"
+                holiday_schedule[f"Holiday{i}EndDay"] = str(int(holiday["timeSetting"]["endDate"].split("-")[2]))
+                holiday_schedule[f"Holiday{i}EndHour"] = str(int(holiday["timeSetting"]["endTime"].split(":")[0]))
+                holiday_schedule[f"Holiday{i}EndMonth"] = holiday["timeSetting"]["endDate"].split("-")[1]
+                holiday_schedule[f"Holiday{i}ID"] = str(i)
+                holiday_schedule[f"Holiday{i}StartDay"] = str(int(holiday["timeSetting"]["startDate"].split("-")[2]))
+                holiday_schedule[f"Holiday{i}StartHour"] = str(int(holiday["timeSetting"]["startTime"].split(":")[0]))
+                holiday_schedule[f"Holiday{i}StartMonth"] = holiday["timeSetting"]["startDate"].split("-")[1]
+                self._logger.debug("Holiday schedule %s generated (enabled=%s)", i, holiday["isEnabled"])
 
-            holiday_schedule["HolidayEnabledCount"] = str(holiday_id_count - 1)
+        holiday_schedule["HolidayEnabledCount"] = str(holiday_id_count)
+        if holiday_id_count > 0:
             holiday_schedule["Holidaytemp"] = self._get_holiday_temp(device_id)
             self._logger.debug("Holiday temperature for device %s: %s", device_id, holiday_schedule["Holidaytemp"])
-        else:
-            self._logger.info("Holiday schedule is not enabled for device %s", device_id)
 
         self._logger.info("Holiday schedule generation complete for device %s", device_id)
         return holiday_schedule
@@ -309,9 +332,9 @@ class ThermostatDataGenerator():
         if raw_summer_time["isEnabled"]:
             summer_time_schedule["SummerEnabled"] = "1"
             summer_time_schedule["SummerEndDay"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[2]))
-            summer_time_schedule["SummerEndMonth"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[1]))
+            summer_time_schedule["SummerEndMonth"] = raw_summer_time["actions"][0]["timeSetting"]["endDate"].split("-")[1]
             summer_time_schedule["SummerStartDay"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[2]))
-            summer_time_schedule["SummerStartMonth"] = str(int(raw_summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[1]))
+            summer_time_schedule["SummerStartMonth"] = raw_summer_time["actions"][0]["timeSetting"]["startDate"].split("-")[1]
             self._logger.debug("Summer time schedule generated: %s", summer_time_schedule)
         else:
             summer_time_schedule["SummerEnabled"] = "0"
@@ -331,8 +354,8 @@ class ThermostatDataGenerator():
             if device["category"] == "THERMOSTAT":
                 self._logger.debug("Processing thermostat device: %s", name)
                 thermostat_data[name] = {}
-                thermostat_data[name]["Offset"] = str(
-                    self._get_object(device, "TEMPERATURE_SENSOR",  "SmartHomeTemperatureSensor", "offset"))
+                offset = self._get_object(device, "TEMPERATURE_SENSOR",  "SmartHomeTemperatureSensor", "offset")
+                thermostat_data[name]["Offset"] = str(int(offset)) if offset == int(offset) else str(offset)
                 thermostat_data[name]["WindowOpenTimer"] = str(
                     self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "temperatureDropDetection")["doNotHeatOffsetInMinutes"])
                 # WindowOpenTrigger musst always be + 3
@@ -351,11 +374,15 @@ class ThermostatDataGenerator():
                 self._logger.debug("Lock settings for %s: locklocal=%s, lockuiapp=%s",
                                 name, thermostat_data[name]["locklocal"], thermostat_data[name]["lockuiapp"])
 
-                adaptiv_heating = self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "adaptivHeating")
-                thermostat_data[name]["hkr_adaptheat"] = adaptiv_heating['isEnabled'] and adaptiv_heating['supported']
-                self._logger.debug("Adaptive heating for %s: %s", name, thermostat_data[name]["hkr_adaptheat"])
+                used_temp_sensor = self._get_object(device, "THERMOSTAT", "SmartHomeThermostat", "usedTempSensor")
+                if used_temp_sensor:
+                    room_temp = used_temp_sensor["skills"][0]["currentInCelsius"]
+                    thermostat_data[name]["Roomtemp"] = str(int(room_temp)) if room_temp == int(room_temp) else str(room_temp)
 
                 if not grouped:
+                    adaptiv_heating = self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "adaptivHeating")
+                    thermostat_data[name]["hkr_adaptheat"] = "1" if (adaptiv_heating['isEnabled'] and adaptiv_heating['supported']) else "0"
+                    self._logger.debug("Adaptive heating for %s: %s", name, thermostat_data[name]["hkr_adaptheat"])
                     thermostat_data[name]['graphState'] = "1"
                     temperatures = self._get_object(device, "THERMOSTAT",  "SmartHomeThermostat", "presets")
                     thermostat_data[name]["Absenktemp"] = self._get_temperature(temperatures, "LOWER_TEMPERATURE")

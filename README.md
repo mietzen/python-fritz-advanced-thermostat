@@ -14,17 +14,14 @@ But with any FritzOS upgrade this library might stop working, don't uses this if
 
 ## Requirements
 
-* Python 3.9.0 or higher
+* Python 3.12.0 or higher
 
 ## Tested configurations
 
 |     Device     | Tested in FritzOS |
 |:--------------:|:-----------------:|
-| FRITZ!DECT 301 |       7.29        |
-| FRITZ!DECT 301 |       7.30        |
-| FRITZ!DECT 301 |       7.31        |
-| FRITZ!DECT 301 |       7.56        |
-| FRITZ!DECT 301 |       7.57        |
+| FRITZ!DECT 301 |       7.60        |
+
 
 If you have a different device or FritzOS version set `experimental=True` this will disable all checks, but beware there might be dragons!
 

@@ -1,0 +1,13 @@
+apply=
+back_to_page=%2Fsmarthome%2Fdevices.lua
+device=16
+ExtTempsensorID=tochoose
+lang=de
+Offset=-3.5
+Roomtemp=21
+tempsensor=own
+ule_device_name=Living%20Room%20West
+view=
+WindowOpenTimer=10
+WindowOpenTrigger=8
+xhr=1

@@ -1,0 +1,17 @@
+{
+    "device": 16,
+    "view": null,
+    "back_to_page": "/smarthome/devices.lua",
+    "ule_device_name": "Living Room West",
+    "tempsensor": "own",
+    "ExtTempsensorID": "tochoose",
+    "Offset": "-3.5",
+    "WindowOpenTimer": "10",
+    "WindowOpenTrigger": "8",
+    "locklocal": false,
+    "lockuiapp": false,
+    "Roomtemp": "21",
+    "xhr": "1",
+    "lang": "de",
+    "apply": null
+}
