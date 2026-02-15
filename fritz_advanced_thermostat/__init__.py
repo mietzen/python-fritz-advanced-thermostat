@@ -391,3 +391,7 @@ class FritzAdvancedThermostat:
                 elif dev_data["model"] in self._supported_thermostats:
                     self._thermostats.add(dev_name)
         return self._thermostats
+
+    def reload_thermostat_data(self) -> None:
+        """Force a reload of all thermostat data from the Fritz!Box."""
+        self._generate_thermostat_data(force_reload=True)
