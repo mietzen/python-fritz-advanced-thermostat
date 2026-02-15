@@ -4,8 +4,7 @@ A library for setting the values [AHA requests](https://avm.de/fileadmin/user_up
 
 For basic settings use [Heikos (hthiery)](https://github.com/hthiery) amazing [pyfritzhome](https://github.com/hthiery/python-fritzhome)!
 
-
-This library will always be hacky and will never leave the "beta state", since it uses undocumented API's and selenium for data scraping.
+This library will always be hacky and will never leave the "beta state", since it uses undocumented API's.
 I use this library myself and I give my best to keep it updated.
 
 But with any FritzOS upgrade this library might stop working, don't uses this if you can't live with that!
@@ -21,7 +20,6 @@ But with any FritzOS upgrade this library might stop working, don't uses this if
 |     Device     | Tested in FritzOS |
 |:--------------:|:-----------------:|
 | FRITZ!DECT 301 |       7.60        |
-
 
 If you have a different device or FritzOS version set `experimental=True` this will disable all checks, but beware there might be dragons!
 
@@ -71,7 +69,8 @@ except FritzAdvancedThermostatError as err:
 ## Credits
 
 Thanks to:
-- [Argelbargel](https://github.com/Argelbargel) from the openHab community for [showing me a way](https://community.openhab.org/t/groovy-script-rule-to-update-temperature-offsets-of-avm-fritz-dect-301-302-based-on-external-temperature-sensors/139917) to obtain the thermostat data without selenium.
+
+* [Argelbargel](https://github.com/Argelbargel) from the openHab community for [showing me a way](https://community.openhab.org/t/groovy-script-rule-to-update-temperature-offsets-of-avm-fritz-dect-301-302-based-on-external-temperature-sensors/139917) to obtain the thermostat data without selenium.
 
 ## Disclaimer
 

@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fritz-advanced-thermostat"
+dynamic = ["version"]
+description = "A library for setting FRITZ!DECT thermostat values (e.g. offset, holidays, timer), that can't be set via AHA requests."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [
+    { name = "Nils Stein", email = "github.nstein@mailbox.org" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+keywords = ["fritzbox", "smarthome", "avm", "thermostat"]
+dependencies = [
+    "requests>=2.31.0",
+    "packaging>=23.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/mietzen/python-fritz-advanced-thermostat"
+
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+include = ["fritz_advanced_thermostat*"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "C901",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "S314",
+    "E501",
+    "FBT001",
+    "FBT002",
+    "RUF015",
+    "D203",
+    "D213",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
