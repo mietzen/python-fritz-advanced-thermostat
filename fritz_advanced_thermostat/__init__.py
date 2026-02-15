@@ -394,4 +394,4 @@ class FritzAdvancedThermostat:
 
     def reload_thermostat_data(self) -> None:
         """Force a reload of all thermostat data from the Fritz!Box."""
-        self._generate_thermostat_data(True)
+        self._generate_thermostat_data(force_reload=True)
