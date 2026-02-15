@@ -347,6 +347,25 @@ class FritzAdvancedThermostat:
         self._check_device_name(device_name)
         return float(self._thermostat_data[device_name]["Offset"])
 
+    def get_thermostat_temperature(self, device_name: str, force_reload: bool = False) -> float:
+        """Retrieve the current room temperature for a given thermostat device.
+
+        Args:
+            device_name (str): The name of the thermostat device to retrieve the temperature for.
+            force_reload (bool, optional): If True, forces a reload of thermostat data before retrieving
+                                        the temperature. Defaults to False.
+
+        Returns:
+            float: The current room temperature of the specified thermostat device.
+
+        Raises:
+            KeyError: If the specified device name is not found in the thermostat data.
+
+        """
+        self._generate_thermostat_data(force_reload)
+        self._check_device_name(device_name)
+        return float(self._thermostat_data[device_name]["Roomtemp"])
+
     def get_thermostats(self) -> set:
         """Retrieve a set of thermostat device names.
 
