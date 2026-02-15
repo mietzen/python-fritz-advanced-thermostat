@@ -33,7 +33,13 @@ pip install fritz-advanced-thermostat
 
 You will also need to [setup a user](https://github.com/hthiery/python-fritzhome#fritzbox-user).
 
-## Example Usage
+
+## Homeassistant integration
+
+You can integrate this library as a [HACS](https://www.hacs.xyz/) [AppDaemon App](https://www.hacs.xyz/docs/use/repositories/type/appdaemon/). For installation and configuration checkout: [mietzen/fritz-advanced-thermostat-hacs](https://github.com/mietzen/fritz-advanced-thermostat-hacs?tab=readme-ov-file#installation)
+
+
+## Example Usage in Python
 
 ```python
 from fritz_advanced_thermostat import FritzAdvancedThermostat
