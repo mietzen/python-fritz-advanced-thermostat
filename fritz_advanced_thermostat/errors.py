@@ -1,13 +1,21 @@
+"""Custom exceptions for FritzAdvancedThermostat."""
+
+
 class FritzAdvancedThermostatExecutionError(Exception):
-    pass
+    """Unknown error while executing."""
+
 
 class FritzAdvancedThermostatCompatibilityError(Exception):
-    pass
+    """Fritz!BOX is not compatible with this module."""
+
 
 class FritzAdvancedThermostatKeyError(KeyError):
-    pass
+    """Error while obtaining a key from the Fritz!BOX."""
+
 
 class FritzAdvancedThermostatConnectionError(ConnectionError):
-    pass
+    """Error while connecting to the Fritz!BOX."""
+
 
 FritzAdvancedThermostatError = (FritzAdvancedThermostatExecutionError, FritzAdvancedThermostatCompatibilityError, FritzAdvancedThermostatKeyError, FritzAdvancedThermostatConnectionError)
+

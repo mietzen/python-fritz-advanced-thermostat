@@ -1,19 +1,10 @@
-# Disclaimer
-
-**This package is not related to or developed by AVM. No relationship between the developer of this package and AVM exists.**
-
-**All trademarks, logos and brand names are the property of their respective owners. All company, product and service names used in this package are for identification purposes only. Use of these names,trademarks and brands does not imply endorsement.**
-
-
 # Advanced Fritz Thermostat
 
 A library for setting the values [AHA requests](https://avm.de/fileadmin/user_upload/Global/Service/Schnittstellen/AHA-HTTP-Interface.pdf) won't let you!
 
 For basic settings use [Heikos (hthiery)](https://github.com/hthiery) amazing [pyfritzhome](https://github.com/hthiery/python-fritzhome)!
 
-## Disclaimer
-
-This library will always be hacky and will never leave the "beta state", since it uses undocumented API's and selenium for data scraping.
+This library will always be hacky and will never leave the "beta state", since it uses undocumented API's.
 I use this library myself and I give my best to keep it updated.
 
 But with any FritzOS upgrade this library might stop working, don't uses this if you can't live with that!
@@ -22,17 +13,13 @@ But with any FritzOS upgrade this library might stop working, don't uses this if
 
 ## Requirements
 
-* Python 3.9.0 or higher
+* Python 3.12.0 or higher
 
 ## Tested configurations
 
 |     Device     | Tested in FritzOS |
 |:--------------:|:-----------------:|
-| FRITZ!DECT 301 |       7.29        |
-| FRITZ!DECT 301 |       7.30        |
-| FRITZ!DECT 301 |       7.31        |
-| FRITZ!DECT 301 |       7.56        |
-| FRITZ!DECT 301 |       7.57        |
+| FRITZ!DECT 301 |       7.60        |
 
 If you have a different device or FritzOS version set `experimental=True` this will disable all checks, but beware there might be dragons!
 
@@ -52,9 +39,9 @@ You will also need to [setup a user](https://github.com/hthiery/python-fritzhome
 from fritz_advanced_thermostat import FritzAdvancedThermostat
 from fritz_advanced_thermostat import FritzAdvancedThermostatError
 
-host='192.168.178.1'
-user='my-user'
-password='my-password'
+host = '192.168.178.1'
+user = 'my-user'
+password = 'my-password'
 
 try:
     fat = FritzAdvancedThermostat(host, user, password, ssl_verify=False, experimental=False)
@@ -64,19 +51,29 @@ try:
     for dev in devices:
         print('Device name: ' + dev)
 
-    device_name = devices[0]
+    device_name = next(iter(devices))  # Get the first device name
     current_offset = fat.get_thermostat_offset(device_name)
-    print('Current offset of ' + device_name + ': ' + str(current_offset))
+    print(f'Current offset of {device_name}: {current_offset}')
+
     fat.set_thermostat_offset(device_name, current_offset + 1)
     fat.commit()
 
     new_offset = fat.get_thermostat_offset(device_name, force_reload=True)
-    print('New offset of ' + device_name + ': ' + str(new_offset))
+    print(f'New offset of {device_name}: {new_offset}')
+
 except FritzAdvancedThermostatError as err:
-    print('An error ouccured, check the logs!')
+    print('An error occurred, check the logs!')
     print(err)
 ```
 
-## Contribute
+## Credits
 
-Contributions are always welcome, just open a PR, specially if you find a way to obtain the thermostat data without selenium!
+Thanks to:
+
+* [Argelbargel](https://github.com/Argelbargel) from the openHab community for [showing me a way](https://community.openhab.org/t/groovy-script-rule-to-update-temperature-offsets-of-avm-fritz-dect-301-302-based-on-external-temperature-sensors/139917) to obtain the thermostat data without selenium.
+
+## Disclaimer
+
+**This package is not related to or developed by AVM. No relationship between the developer of this package and AVM exists.**
+
+**All trademarks, logos and brand names are the property of their respective owners. All company, product and service names used in this package are for identification purposes only. Use of these names,trademarks and brands does not imply endorsement.**
