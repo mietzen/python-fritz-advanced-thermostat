@@ -47,6 +47,6 @@ jobs:
         SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.Setup.outputs.version }}
       run: python -m build --wheel
     - name: Publish package
-      uses: pypa/gh-action-pypi-publish@v1.12.4
+      uses: pypa/gh-action-pypi-publish@v1.13.0
       with:
         password: ${{ secrets.PYPI_API_TOKEN }}
