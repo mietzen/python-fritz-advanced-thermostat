@@ -29,6 +29,8 @@ class FritzConnection:
         self._ssl_verify = ssl_verify
         self._logger = logging.getLogger("FritzAdvancedThermostatLogger")
         self._sid = None
+        self._user = None
+        self._password = None
 
     def _generate_headers(self, data: dict) -> dict:
         self._logger.debug("Generating headers for the request.")
@@ -47,7 +49,7 @@ class FritzConnection:
         self._logger.debug("Headers generated: %s", headers)
         return headers
 
-    def post_req(self, payload: dict, site: str) -> str:
+    def post_req(self, payload: dict, site: str, _sid_refreshed: bool = False) -> str:
         """Send a POST request to the Fritz!Box."""
         url = f"{self._prefixed_host}/{site}"
         payload = {"sid": self._sid} | payload
@@ -99,11 +101,19 @@ class FritzConnection:
             self._logger.error("Request failed: %s", err)
             raise FritzAdvancedThermostatConnectionError(err)
 
+        if '"sid":"0000000000000000"' in response.text and not _sid_refreshed:
+            self._logger.warning("SID expired, refreshing SID and retrying request.")
+            self.refresh_sid()
+            payload.pop("sid")
+            return self.post_req(payload, site, _sid_refreshed=True)
+
         self._logger.debug("Response received: %s", response.text)
         return response.text
 
     def login(self, user: str, password: str) -> None:
         """Authenticate with the Fritz!Box using PBKDF2 challenge-response."""
+        self._user = user
+        self._password = password
         url = "/".join([self._prefixed_host, f"login_sid.lua?version=2&user={user}"])
         response = requests.get(
             url, verify=self._ssl_verify, timeout=self._timeout)
@@ -137,6 +147,10 @@ class FritzConnection:
                 self._logger.error(err)
                 raise FritzAdvancedThermostatConnectionError(err)
         self._sid = sid
+
+    def refresh_sid(self) -> None:
+        """Re-authenticate with the Fritz!Box to obtain a fresh SID."""
+        self.login(self._user, self._password)
 
     def get_fritz_os_version(self) -> str:
         """Retrieve the Fritz!OS version from the Fritz!Box."""
