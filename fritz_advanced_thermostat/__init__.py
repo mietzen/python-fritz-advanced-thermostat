@@ -390,6 +390,18 @@ class FritzAdvancedThermostat:
                     self._thermostats.add(dev_name)
         return self._thermostats
 
+    def refresh_sid(self) -> None:
+        """Re-authenticate with the Fritz!Box to obtain a fresh session ID (SID).
+
+        This is useful for long-running applications where the SID may expire
+        due to inactivity (~20 minutes).
+
+        Raises:
+            FritzAdvancedThermostatConnectionError: If re-authentication fails.
+
+        """
+        self._fritz_conn.refresh_sid()
+
     def reload_thermostat_data(self) -> None:
         """Force a reload of all thermostat data from the Fritz!Box."""
         self._generate_thermostat_data(force_reload=True)
