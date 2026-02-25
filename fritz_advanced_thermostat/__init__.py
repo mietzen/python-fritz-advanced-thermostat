@@ -135,7 +135,7 @@ class FritzAdvancedThermostat:
             self._logger.error(err)
             raise FritzAdvancedThermostatExecutionError(err)
 
-        self._supported_firmware = ["7.60"]
+        self._supported_firmware = ["7.60", "7.62"]
         # Set basic properties
         self._experimental = experimental
         self._ssl_verify = ssl_verify
