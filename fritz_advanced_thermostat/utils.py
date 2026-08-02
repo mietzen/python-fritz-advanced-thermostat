@@ -298,7 +298,7 @@ class ThermostatDataGenerator:
                 state = "SET_OFF"
             else:
                 err = "Error: state not found!"
-                self._logger.exception(err)
+                self._logger.error(err)
                 raise FritzAdvancedThermostatExecutionError(err)
 
             # Get bitmask and category for the action

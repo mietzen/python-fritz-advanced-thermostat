@@ -41,9 +41,11 @@ target-version = "py312"
 select = ["ALL"]
 ignore = [
     "C901",
+    "CPY001",
     "PLR0912",
     "PLR0913",
     "PLR0915",
+    "PLR0917",
     "S314",
     "E501",
     "FBT001",
