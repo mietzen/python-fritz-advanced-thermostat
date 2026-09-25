@@ -7,7 +7,7 @@ on:
 
 jobs:
   Lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       matrix:
         python-version: ["3.12"]
@@ -28,7 +28,7 @@ jobs:
           ruff check fritz_advanced_thermostat
 
   Test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       matrix:
         python-version: ["3.12"]
@@ -50,7 +50,7 @@ jobs:
 
   Check:
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs:
       - Lint
       - Test
